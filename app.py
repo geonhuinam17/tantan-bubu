@@ -35,18 +35,23 @@ st.markdown("""
         height: 170px;
     }
 
-    /* 슬라이더 회색 박스 완전 제거 및 선만 진회색 설정 */
-    div[data-testid="stSlider"] {
+    /* [핵심 수정] 슬라이더 회색 박스 강제 제거 및 선만 진회색 설정 */
+    /* 1. 슬라이더 컨테이너의 모든 배경을 투명하게 */
+    div[data-testid="stSlider"], div[data-testid="stSlider"] > div {
         background-color: transparent !important;
         background: none !important;
-        padding: 0px !important;
+        border: none !important;
+        box-shadow: none !important;
     }
+    /* 2. 슬라이더 트랙(기본 선) 색상 */
     .stSlider [data-baseweb="slider"] > div:first-child {
-        background: #dee2e6 !important; /* 기본 선 */
+        background: #dee2e6 !important; 
     }
+    /* 3. 선택된 구간의 선 색상 (진한 회색) */
     .stSlider [data-baseweb="slider"] > div > div {
-        background: #495057 !important; /* 활성화된 선 (진회색) */
+        background: #495057 !important; 
     }
+    /* 4. 슬라이더 핸들(동그라미) 색상 */
     .stSlider [role="slider"] {
         background-color: #495057 !important;
         border: 2px solid #FFFFFF !important;
@@ -69,6 +74,12 @@ st.markdown("""
         font-weight: 700 !important;
         color: #666 !important;
     }
+
+    /* [수정] 표 스타일: 모든 글자 검정색 */
+    .stTable td, .stTable th {
+        color: #000000 !important;
+        font-weight: 500 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -81,7 +92,7 @@ def get_tantan_data():
         "monthly_income": 11547372, "monthly_expense": 6125348, "monthly_savings": 5422024
     }
     
-    # 👸 왕비(분홍) / 🤴 왕(보라 계열로 수정)
+    # 👸 왕비(분홍) / 🤴 왕(보라 계열)
     portfolio = pd.DataFrame([
         {"소유주": "👸 왕비", "항목": "해외주식", "금액": 31225286, "색상": "#FF1493"},
         {"소유주": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4"},
@@ -133,11 +144,10 @@ with tab1:
     
     with col_l:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
-        # 차트 먼저
         months = df_t['날짜'].dt.strftime('%Y-%m').tolist()
         
-        # [수정] 차트 하단에 슬라이더 배치 (배경 투명, 선만 진회색)
         chart_placeholder = st.empty()
+        # [수정] 슬라이더 회색 박스 강제 제거 CSS 적용됨
         start_m, end_m = st.select_slider("📅 조회 월 범위 선택", options=months, value=(months[0], months[-1]))
         
         f_t = df_t[(df_t['날짜'] >= pd.to_datetime(start_m)) & (df_t['날짜'] <= pd.to_datetime(end_m))]
@@ -158,17 +168,22 @@ with tab1:
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         
-        # [수정] 왕/왕비 전체 비중 표 (상단 별도 배치)
+        # [수정] 왕/왕비 비중 표: 모든 글자 검정색 적용
         owner_summary = df_p.groupby("소유주")["금액"].sum().reset_index()
         total_inv = owner_summary["금액"].sum()
         owner_summary["비중"] = (owner_summary["금액"] / total_inv * 100).round(1).astype(str) + "%"
         owner_summary["금액(원)"] = owner_summary["금액"].apply(lambda x: f"{x:,.0f}")
         st.table(owner_summary[["소유주", "금액(원)", "비중"]].set_index("소유주"))
 
-        # [수정] 파이차트 (중앙 노란색 없는 깔끔한 파이)
+        # [수정] 파이차트: 내부 원화(₩) 표시
         fig_pie = px.pie(df_p, names='항목', values='금액',
                          color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
-        fig_pie.update_traces(textinfo="label+percent", textposition="inside")
+        # 텍스트 형식: 레이블 + 퍼센트 + 금액(원화)
+        fig_pie.update_traces(
+            textinfo="label+percent+value", 
+            texttemplate="%{label}<br>%{percent}<br>₩%{value:,.0f}",
+            textposition="inside"
+        )
         fig_pie.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_pie, use_container_width=True)
 
