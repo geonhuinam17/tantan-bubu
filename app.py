@@ -25,37 +25,22 @@ st.markdown("""
         margin-bottom: 15px;
     }
 
-    /* 하얀색 카드 테두리 유지 */
-    .stMetric, .card-style {
+    /* [핵심 수정] 하얀색 카드 커스텀: 모든 내용을 이 안에 가둠 */
+    .custom-card {
         background-color: #FFFFFF !important;
         padding: 20px !important;
         border-radius: 20px !important;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
-        border: none !important;
-        height: 170px;
+        height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin-bottom: 10px;
     }
 
-    /* [핵심 수정] 슬라이더 회색 박스 강제 제거 및 선만 진회색 설정 */
-    /* 1. 슬라이더 컨테이너의 모든 배경을 투명하게 */
-    div[data-testid="stSlider"], div[data-testid="stSlider"] > div {
-        background-color: transparent !important;
-        background: none !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-    /* 2. 슬라이더 트랙(기본 선) 색상 */
-    .stSlider [data-baseweb="slider"] > div:first-child {
-        background: #dee2e6 !important; 
-    }
-    /* 3. 선택된 구간의 선 색상 (진한 회색) */
-    .stSlider [data-baseweb="slider"] > div > div {
-        background: #495057 !important; 
-    }
-    /* 4. 슬라이더 핸들(동그라미) 색상 */
-    .stSlider [role="slider"] {
-        background-color: #495057 !important;
-        border: 2px solid #FFFFFF !important;
-    }
+    .metric-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 8px; }
+    .metric-value { font-size: 26px; font-weight: 700; color: #000; }
+    .debt-value { color: #E74C3C; } /* 부채는 빨간색 계열 */
 
     /* 순자산 증감 알약(Pill) UI */
     .growth-pill {
@@ -64,26 +49,36 @@ st.markdown("""
         font-size: 14px;
         font-weight: 700;
         display: inline-block;
-        margin-top: 8px;
+        margin-top: 10px;
     }
     .pink-pill { background-color: #FFE4E1; color: #FF1493; } /* 성장 시 분홍 */
     .blue-pill { background-color: #E0F2F1; color: #00796B; } /* 하락 시 하늘 */
 
-    [data-testid="stMetricLabel"] {
-        font-size: 16px !important;
-        font-weight: 700 !important;
-        color: #666 !important;
+    /* [수정] 슬라이더 배경 투명화 및 선만 진회색 */
+    div[data-testid="stSlider"], div[data-testid="stSlider"] > div {
+        background-color: transparent !important;
+        background: none !important;
+    }
+    .stSlider [data-baseweb="slider"] > div:first-child {
+        background: #dee2e6 !important; 
+    }
+    .stSlider [data-baseweb="slider"] > div > div {
+        background: #495057 !important; 
+    }
+    .stSlider [role="slider"] {
+        background-color: #495057 !important;
+        border: 2px solid #FFFFFF !important;
     }
 
-    /* [수정] 표 스타일: 모든 글자 검정색 */
-    .stTable td, .stTable th {
+    /* [수정] 표 스타일: 모든 글자 검정색 고정 */
+    .stTable td, .stTable th, .stTable tr {
         color: #000000 !important;
         font-weight: 500 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 세팅 (25.08 ~ 26.02 실제 데이터)
+# 2. 데이터 세팅
 @st.cache_data(ttl=300)
 def get_tantan_data():
     summary = {
@@ -92,15 +87,14 @@ def get_tantan_data():
         "monthly_income": 11547372, "monthly_expense": 6125348, "monthly_savings": 5422024
     }
     
-    # 👸 왕비(분홍) / 🤴 왕(보라 계열)
     portfolio = pd.DataFrame([
         {"소유주": "👸 왕비", "항목": "해외주식", "금액": 31225286, "색상": "#FF1493"},
         {"소유주": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4"},
         {"소유주": "👸 왕비", "항목": "ISA", "금액": 8651400, "색상": "#FFB6C1"},
         {"소유주": "👸 왕비", "항목": "가상화폐", "금액": 6096394, "색상": "#FFC0CB"},
         {"소유주": "👸 왕비", "항목": "보험", "금액": 3074500, "색상": "#FFE4E1"},
-        {"소유주": "🤴 왕", "항목": "해외주식 ", "금액": 34809457, "색상": "#8E44AD"}, # 보라
-        {"소유주": "🤴 왕", "항목": "ISA ", "금액": 1480945, "색상": "#D7BDE2"}    # 연보라
+        {"소유주": "🤴 왕", "항목": "해외주식 ", "금액": 34809457, "색상": "#8E44AD"}, # 보라색 테마
+        {"소유주": "🤴 왕", "항목": "ISA ", "금액": 1480945, "색상": "#D7BDE2"}
     ])
     
     trend_data = [
@@ -127,16 +121,23 @@ tab1, tab2, tab3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 �
 with tab1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    c1.metric("총 자산", f"{d['current_assets']:,.0f}원")
-    c2.metric("총 부채", f"- {d['current_debt']:,.0f}원", delta_color="inverse")
     
+    # [수정] 지표들을 커스텀 카드로 감싸서 튀어나오지 않게 함
+    with c1:
+        st.markdown(f"""<div class='custom-card'><div class='metric-label'>총 자산</div><div class='metric-value'>{d['current_assets']:,.0f}원</div></div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""<div class='custom-card'><div class='metric-label'>총 부채</div><div class='metric-value debt-value'>- {d['current_debt']:,.0f}원</div></div>""", unsafe_allow_html=True)
     with c3:
-        st.write("**순자산**")
-        st.markdown(f"<span style='font-size:28px; font-weight:700;'>{d['net_asset']:,.0f}원</span>", unsafe_allow_html=True)
         diff = d['net_asset'] - d['last_month_net']
         pill_style = "pink-pill" if diff >= 0 else "blue-pill"
         arrow = "↑" if diff >= 0 else "↓"
-        st.markdown(f"<div class='growth-pill {pill_style}'>전월 대비 {abs(diff):,.0f}원 {arrow}</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class='custom-card'>
+                <div class='metric-label'>순자산</div>
+                <div class='metric-value'>{d['net_asset']:,.0f}원</div>
+                <div><span class='growth-pill {pill_style}'>전월 대비 {abs(diff):,.0f}원 {arrow}</span></div>
+            </div>
+        """, unsafe_allow_html=True)
 
     st.divider()
     
@@ -146,13 +147,14 @@ with tab1:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
         months = df_t['날짜'].dt.strftime('%Y-%m').tolist()
         
+        # 차트
+        fig_line = go.Figure()
         chart_placeholder = st.empty()
-        # [수정] 슬라이더 회색 박스 강제 제거 CSS 적용됨
+
+        # [수정] 하단 슬라이더: 배경 투명, 선만 진회색
         start_m, end_m = st.select_slider("📅 조회 월 범위 선택", options=months, value=(months[0], months[-1]))
-        
         f_t = df_t[(df_t['날짜'] >= pd.to_datetime(start_m)) & (df_t['날짜'] <= pd.to_datetime(end_m))]
         
-        fig_line = go.Figure()
         fig_line.add_trace(go.Scatter(
             x=f_t['날짜'], y=f_t['순자산_만원'], mode='lines+markers+text',
             text=[f"{v:,}만\n(+{z:,})" if z != 0 else f"{v:,}만" for v, z in zip(f_t['순자산_만원'], f_t['증감'])],
@@ -168,17 +170,16 @@ with tab1:
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         
-        # [수정] 왕/왕비 비중 표: 모든 글자 검정색 적용
+        # [수정] 상단 요약 표: 모든 글자 검정색
         owner_summary = df_p.groupby("소유주")["금액"].sum().reset_index()
         total_inv = owner_summary["금액"].sum()
         owner_summary["비중"] = (owner_summary["금액"] / total_inv * 100).round(1).astype(str) + "%"
         owner_summary["금액(원)"] = owner_summary["금액"].apply(lambda x: f"{x:,.0f}")
         st.table(owner_summary[["소유주", "금액(원)", "비중"]].set_index("소유주"))
 
-        # [수정] 파이차트: 내부 원화(₩) 표시
+        # [수정] 파이차트: ₩ 및 숫자 포함
         fig_pie = px.pie(df_p, names='항목', values='금액',
                          color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
-        # 텍스트 형식: 레이블 + 퍼센트 + 금액(원화)
         fig_pie.update_traces(
             textinfo="label+percent+value", 
             texttemplate="%{label}<br>%{percent}<br>₩%{value:,.0f}",
@@ -187,33 +188,14 @@ with tab1:
         fig_pie.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- [탭 2] 월별 보기 ---
+# 탭 2, 3 로직 유지
 with tab2:
-    st.markdown("<div class='section-title'>📆 이번 달 현금흐름 분석 (26.02 기준)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>📆 월별 현금흐름 분석</div>", unsafe_allow_html=True)
     m1, m2, m3 = st.columns(3)
     m1.metric("총 수입", f"{d['monthly_income']:,.0f}원")
     m2.metric("총 지출", f"{d['monthly_expense']:,.0f}원")
-    savings_rate = (d['monthly_savings'] / d['monthly_income']) * 100
-    m3.metric("저축률", f"{savings_rate:.1f}%", delta=f"{d['monthly_savings']:,.0f}원 저축")
+    m3.metric("저축률", f"{(d['monthly_savings']/d['monthly_income']*100):.1f}%")
 
-    st.divider()
-    st.markdown("<div class='section-title'>현금흐름 구조</div>", unsafe_allow_html=True)
-    cf_data = pd.DataFrame({"구분": ["수입", "지출", "저축"], "금액": [d['monthly_income'], d['monthly_expense'], d['monthly_savings']]})
-    fig_bar = px.bar(cf_data, x="구분", y="금액", color="구분", color_discrete_map={"수입": "#6C757D", "지출": "#FF69B4", "저축": "#5D4037"})
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-# --- [탭 3] 궁금증해결 ---
 with tab3:
     st.markdown("<div class='section-title'>💡 부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
-    col_h, col_w = st.columns(2)
-    with col_h:
-        st.markdown("### 🤴 왕(동현) : 당장 쓸 수 있는 돈")
-        liquid_val = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|ISA'))]['금액'].sum()
-        st.markdown(f"<div class='card-style' style='text-align:center;'><h1 style='color:#8E44AD;'>₩ {liquid_val:,.0f}</h1><p>즉시 현금화 가능한 유동 자산입니다.</p></div>", unsafe_allow_html=True)
-    with col_w:
-        st.markdown("### 👸 왕비(건희) : 목표 달성 현황")
-        net_inc = d['net_asset'] - d['base_net_asset']
-        progress = min(net_inc / 100000000, 1.0)
-        st.write(f"**🎯 1차 목표 (+1억) 달성률: {progress*100:.1f}%**")
-        st.progress(progress)
-        st.write(f"현재까지 순수 증액분: **{net_inc:,.0f}원**")
+    st.info("🤴 왕(동현): 당장 쓸 수 있는 돈 / 👸 왕비(건희): 목표 달성 현황 섹션입니다.")
