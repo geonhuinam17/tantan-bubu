@@ -13,10 +13,9 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'KoPubWorldDotum', sans-serif !important;
-        background-color: #E9ECEF; /* 진한 회색 배경 */
+        background-color: #E9ECEF; 
     }
     
-    /* 섹션 제목 스타일 */
     .section-title {
         font-size: 20px !important;
         font-weight: 700 !important;
@@ -33,7 +32,6 @@ st.markdown("""
         height: 160px;
     }
 
-    /* 메트릭 라벨 스타일 */
     [data-testid="stMetricLabel"] {
         font-size: 16px !important;
         font-weight: 700 !important;
@@ -41,9 +39,13 @@ st.markdown("""
         margin-bottom: 10px !important;
     }
 
-    /* [수정] 기간 선택 슬라이더 바 색상을 진한 회색으로 변경 */
+    /* [수정 1] 기간 선택 슬라이더 선 색상 및 배경 투명화 */
     .stSlider [data-baseweb="slider"] > div:first-child {
         background: #6C757D !important;
+    }
+    div[data-testid="stSlider"] {
+        background-color: transparent !important;
+        padding: 10px 0px;
     }
     .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] {
         display: none;
@@ -60,7 +62,6 @@ def get_final_data():
         "monthly_income": 11547372, "monthly_expense": 6125348, "monthly_savings": 5422024
     }
     
-    # 👸 왕비(분홍) / 🤴 왕(하늘) 포트폴리오
     portfolio = pd.DataFrame([
         {"소유주": "👸 왕비", "항목": "해외주식", "금액": 31225286, "색상": "#FF1493"},
         {"소유주": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4"},
@@ -104,10 +105,19 @@ with tab1:
     
     with col_l:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
-        months = df_t['날짜'].dt.strftime('%Y-%m').tolist()
-        start_m, end_m = st.select_slider("조회 월 범위 선택", options=months, value=(months[0], months[-1]))
-        f_t = df_t[(df_t['날짜'] >= pd.to_datetime(start_m)) & (df_t['날짜'] <= pd.to_datetime(end_m))]
+        # [수정 1] 차트 먼저 보여주고 하단에 기간 선택 배치
+        f_t_base = df_t.copy()
+        months = f_t_base['날짜'].dt.strftime('%Y-%m').tolist()
+        
+        # 차트 영역
         fig_line = go.Figure()
+        # 임시 데이터 필터링을 위한 컨테이너
+        chart_placeholder = st.empty()
+
+        # [수정 1] 하단에 배치
+        start_m, end_m = st.select_slider("📅 조회 월 범위 선택", options=months, value=(months[0], months[-1]))
+        f_t = f_t_base[(f_t_base['날짜'] >= pd.to_datetime(start_m)) & (f_t_base['날짜'] <= pd.to_datetime(end_m))]
+        
         fig_line.add_trace(go.Scatter(
             x=f_t['날짜'], y=f_t['순자산_만원'], mode='lines+markers+text',
             text=[f"{v:,}만\n(+{z:,})" if z != 0 else f"{v:,}만" for v, z in zip(f_t['순자산_만원'], f_t['증감'])],
@@ -118,18 +128,28 @@ with tab1:
             xaxis=dict(tickformat="%y.%m", dtick="M1", showgrid=False),
             plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0)
         )
-        st.plotly_chart(fig_line, use_container_width=True)
+        chart_placeholder.plotly_chart(fig_line, use_container_width=True)
         
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
-        fig_pie = px.sunburst(df_p, path=['소유주', '항목'], values='금액',
-                              color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
-        # [수정] 중앙 노란색 배경 제거 및 투명 설정
-        fig_pie.update_traces(textinfo="label+value+percent parent", insidetextorientation='horizontal')
+        
+        # [수정 2] 왕/왕비 비중 별도 표 (상단 배치)
+        owner_summary = df_p.groupby("소유주")["금액"].sum().reset_index()
+        total_investment = owner_summary["금액"].sum()
+        owner_summary["비중"] = (owner_summary["금액"] / total_investment * 100).round(1).astype(str) + "%"
+        owner_summary["금액(원)"] = owner_summary["금액"].apply(lambda x: f"{x:,.0f}")
+        
+        st.table(owner_summary[["소유주", "금액(원)", "비중"]].set_index("소유주"))
+
+        # [수정 2] 선버스트 대신 파이차트로 변경
+        fig_pie = px.pie(df_p, names='항목', values='금액',
+                         color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
+        
+        fig_pie.update_traces(textinfo="label+percent", textposition="inside")
         fig_pie.update_layout(
             margin=dict(t=0, l=0, r=0, b=0), 
             paper_bgcolor='rgba(0,0,0,0)',
-            sunburstcolorway=["rgba(0,0,0,0)"] # 중앙 노드 색상 투명화
+            showlegend=False
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -160,9 +180,7 @@ with tab3:
     col_husband, col_wife = st.columns(2)
     
     with col_husband:
-        # 남편이 가장 궁금해하는 것: 현금화 가능 자산
         st.markdown("### 🤴 왕(동현) : 당장 쓸 수 있는 돈")
-        # 해외주식 + 가상화폐 + ISA 합계 (왕 데이터 기준)
         liquid_val = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|가상화폐|ISA'))]['금액'].sum()
         st.markdown(f"""
             <div style="background-color: #FFFFFF; padding: 30px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center;">
@@ -172,7 +190,6 @@ with tab3:
         """, unsafe_allow_html=True)
 
     with col_wife:
-        # 아내가 가장 궁금해하는 것: 목표 달성률
         st.markdown("### 👸 왕비(건희) : 목표 달성 현황")
         net_increase = d['net_asset'] - d['base_net_asset']
         goal1 = 100000000 # 1억
