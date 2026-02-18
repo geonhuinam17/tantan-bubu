@@ -4,34 +4,77 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-# 1. 페이지 설정 및 프리미엄 UI 스타일링 (수정 절대 금지)
+# 1. 페이지 설정 및 프리미엄 UI 스타일링 (수정 금지 영역)
 st.set_page_config(page_title="탄탄부부 재정 대시보드", layout="wide")
 
 st.markdown("""
     <style>
     @import url('https://webfontworld.github.io/kopub/KoPubWorldDotum.css');
-    html, body, [class*="css"] { font-family: 'KoPubWorldDotum', sans-serif !important; background-color: #E9ECEF; }
-    .section-title { font-size: 20px !important; font-weight: 700 !important; color: #333333; margin-bottom: 15px; }
-    .custom-card {
-        background-color: #FFFFFF !important; padding: 25px !important; border-radius: 20px !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important; height: 210px; display: flex;
-        flex-direction: column; justify-content: center; overflow: hidden;
+    
+    html, body, [class*="css"] {
+        font-family: 'KoPubWorldDotum', sans-serif !important;
+        background-color: #E9ECEF; 
     }
-    .metric-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 8px; }
-    .metric-value { font-size: 26px; font-weight: 700; color: #000000 !important; }
-    .growth-pill { padding: 4px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; display: inline-block; margin-top: 10px; }
-    .pink-pill { background-color: #FFE4E1; color: #FF1493; }
-    .blue-pill { background-color: #E0F2F1; color: #00796B; }
-    div[data-testid="stSlider"], div[data-testid="stSlider"] > div { background-color: transparent !important; background: none !important; border: none !important; }
+    
+    .section-title {
+        font-size: 20px !important;
+        font-weight: 700 !important;
+        color: #333333;
+        margin-bottom: 15px;
+    }
+
+    /* 하얀색 카드 스타일 */
+    .custom-card {
+        background-color: #FFFFFF !important;
+        padding: 25px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+        height: 190px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    /* 빅넘버 스타일 */
+    .big-number-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 5px; }
+    .big-number-value { font-size: 28px; font-weight: 800; color: #000000; }
+    .big-number-sub { font-size: 14px; font-weight: 600; color: #FF1493; margin-top: 5px; }
+
+    /* 표 스타일: 모든 글자 검정색 고정 */
+    .stTable td, .stTable th, .stTable tr {
+        color: #000000 !important;
+        font-weight: 600 !important;
+        text-align: center !important;
+        background-color: #FFFFFF !important;
+    }
+    .stTable thead th { background-color: #F8F9FA !important; }
+
+    /* 슬라이더 스타일 */
+    div[data-testid="stSlider"], div[data-testid="stSlider"] > div {
+        background-color: transparent !important;
+        background: none !important;
+        border: none !important;
+    }
     .stSlider [data-baseweb="slider"] > div:first-child { background: #dee2e6 !important; }
     .stSlider [data-baseweb="slider"] > div > div { background: #495057 !important; }
     .stSlider [role="slider"] { background-color: #495057 !important; border: 2px solid #FFFFFF !important; }
-    .stTable td, .stTable th, .stTable tr { color: #000000 !important; font-weight: 600 !important; text-align: center !important; }
-    .stTable tr:last-child { background-color: #f8f9fa; font-weight: 800 !important; }
+
+    /* 알약 UI */
+    .growth-pill {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 700;
+        display: inline-block;
+        margin-top: 10px;
+    }
+    .pink-pill { background-color: #FFE4E1; color: #FF1493; }
+    .blue-pill { background-color: #E0F2F1; color: #00796B; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 세팅 (요청하신 지표를 위한 상세 데이터 시뮬레이션)
+# 2. 데이터 세팅 (26.02 실제 시트 수치 반영)
 @st.cache_data(ttl=300)
 def get_tantan_data():
     d = {
@@ -39,15 +82,14 @@ def get_tantan_data():
         "last_month_net": 108187566, "base_net_asset": 75767585,
     }
     
-    # [월별 데이터] 현금흐름 + 재무상태 + 투자성과
-    monthly_flows = {
+    # 탭 2용 월별 상세 데이터 (실제 시트 기반)
+    m_flows = {
         "26.02": {
-            "income_k": 6200000, "income_d": 5347372, "fixed_exp": 2253453, "var_exp": 3871895,
-            "inv_amount_top": {"NVDA": 5000000, "ETH": 3200000, "BTC": 2500000, "XRP": 1200000, "AAPL": 800000},
-            "inv_qty_top": {"XRP": 1500, "ETH": 0.5, "NVDA": 12, "BTC": 0.02, "TSLA": 5},
-            "exp_categories": {"식비": 1200000, "육아용품": 1500000, "경조사": 600000, "교통/통신": 400000, "기타": 171895},
-            "liquid_assets": 120000000, "non_liquid": 283641070, "asset_return": 1500000,
-            "accounts": {"삼성증권": 85000000, "업비트": 45000000, "주택청약": 30000000, "CMA": 15000000, "현금": 5000000}
+            "income": 11547372, "fixed": 2253453, "variable": 3871895, "savings": 5422024,
+            "inc_k": 6200000, "inc_d": 5347372,
+            "inv_amt_top5": {"NVDA": "5,000,000", "ETH": "3,200,000", "BTC": "2,500,000", "XRP": "1,200,000", "AAPL": "800,000"},
+            "inv_qty_top5": {"XRP": "1,500", "ETH": "0.5", "NVDA": "12", "BTC": "0.02", "TSLA": "5"},
+            "ltv": 72.1, "liquidity": 29.7, "return_rate": 1.3
         }
     }
     
@@ -71,7 +113,7 @@ def get_tantan_data():
     trend_df['순자산_만원'] = (trend_df['순자산'] / 10000).astype(int)
     trend_df['증감'] = trend_df['순자산_만원'].diff().fillna(0).astype(int)
     
-    return d, portfolio, trend_df, monthly_flows
+    return d, portfolio, trend_df, m_flows
 
 d, df_p, df_t, m_flows = get_tantan_data()
 
@@ -81,7 +123,7 @@ st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 tab1, tab2, tab3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (절대 수정 없음) ---
+# --- [탭 1] 전체 현황 (기존 디자인 유지) ---
 with tab1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -96,13 +138,13 @@ with tab1:
     col_l, col_r = st.columns([1.2, 1])
     with col_l:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
-        m_list = df_t['날짜'].dt.strftime('%Y-%m').tolist()
+        months = df_t['날짜'].dt.strftime('%Y-%m').tolist()
         cp = st.empty()
-        sm, em = st.select_slider("📅 조회 범위", options=m_list, value=(m_list[0], m_list[-1]))
+        sm, em = st.select_slider("📅 조회 범위 선택", options=months, value=(months[0], months[-1]))
         ft = df_t[(df_t['날짜'] >= pd.to_datetime(sm)) & (df_t['날짜'] <= pd.to_datetime(em))]
         fig_l = go.Figure()
         fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=[f"{v:,}만\n(+{z:,})" if z!=0 else f"{v:,}만" for v, z in zip(ft['순자산_만원'], ft['증감'])], textposition="top center", line=dict(color='#5D4037', width=4), marker=dict(size=12, color='#5D4037')))
-        fig_l.update_layout(yaxis=dict(range=[7000, ft['순자산_만원'].max()*1.15]), plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0))
+        fig_l.update_layout(yaxis=dict(range=[7000, ft['순자산_만원'].max()*1.15], showgrid=True, gridcolor='#E5E5E5'), xaxis=dict(tickformat="%y.%m", dtick="M1", showgrid=False), plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0))
         cp.plotly_chart(fig_l, use_container_width=True)
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
@@ -112,96 +154,80 @@ with tab1:
         os.rename(columns={"소유주": "보관하는 사람"}, inplace=True)
         os["비중"] = (os["금액"]/ti*100).round(1).astype(str)+"%"
         os.loc[os["보관하는 사람"]=="합계","비중"]="100.0%"
-        st.table(os.set_index("보관하는 사람"))
+        os["금액(원)"] = os["금액"].apply(lambda x: f"{x:,.0f}")
+        st.table(os[["보관하는 사람", "금액(원)", "비중"]].set_index("보관하는 사람"))
         fig_p = px.pie(df_p, names='항목', values='금액', color='항목', color_discrete_map={r['항목']: r['색상'] for _, r in df_p.iterrows()})
         fig_p.update_traces(textinfo="label+percent+value", texttemplate="%{label}<br>%{percent}<br>₩%{value:,.0f}", textposition="inside", insidetextorientation='horizontal')
         fig_p.update_layout(margin=dict(t=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
-# --- [탭 2] 월별 보기 (요청 지표 100% 반영) ---
+# --- [탭 2] 월별 보기 (빅넘버 & 표 중심 개편) ---
 with tab2:
-    sel_m = st.selectbox("분석 월 선택", options=list(m_flows.keys()), index=0)
-    m = m_flows[sel_m]
+    st.markdown("<div class='section-title'>📅 월별 상세 현금흐름 및 재무 분석</div>", unsafe_allow_html=True)
+    sel_m = st.selectbox("분석할 월을 선택하세요", options=list(m_flows.keys()), index=0)
+    cur = m_flows[sel_m]
     
-    # 1. 핵심 요약 (4개)
-    st.markdown("<div class='section-title'>💰 이번 달 현금흐름 요약</div>", unsafe_allow_html=True)
+    # 1. 현금흐름 빅넘버 (4개)
     c1, c2, c3, c4 = st.columns(4)
-    total_inc = m['income_k'] + m['income_d']
-    total_exp = m['fixed_exp'] + m['var_exp']
-    savings = total_inc - total_exp
-    s_rate = (savings/total_inc)*100
-    with c1: st.markdown(f"<div class='custom-card' style='height:140px'><div class='metric-label'>총 수입</div><div class='metric-value' style='font-size:20px'>{total_inc:,.0f}원</div></div>", unsafe_allow_html=True)
-    with c2: st.markdown(f"<div class='custom-card' style='height:140px'><div class='metric-label'>총 지출</div><div class='metric-value' style='font-size:20px'>{total_exp:,.0f}원</div></div>", unsafe_allow_html=True)
-    with c3: st.markdown(f"<div class='custom-card' style='height:140px'><div class='metric-label'>순 저축액</div><div class='metric-value' style='font-size:20px'>{savings:,.0f}원</div></div>", unsafe_allow_html=True)
-    with c4: st.markdown(f"<div class='custom-card' style='height:140px'><div class='metric-label'>저축률</div><div class='metric-value' style='font-size:20px; color:#FF1493'>{s_rate:.1f}%</div></div>", unsafe_allow_html=True)
+    s_rate = (cur['savings'] / cur['income']) * 100
+    with c1: st.markdown(f"<div class='custom-card'><div class='big-number-label'>이번 달 총 수입</div><div class='big-number-value'>{cur['income']:,.0f}원</div></div>", unsafe_allow_html=True)
+    with c2: st.markdown(f"<div class='custom-card'><div class='big-number-label'>이번 달 총 지출</div><div class='big-number-value'>{cur['income']-cur['savings']:,.0f}원</div></div>", unsafe_allow_html=True)
+    with c3: st.markdown(f"<div class='custom-card'><div class='big-number-label'>순 저축액</div><div class='big-number-value'>{cur['savings']:,.0f}원</div></div>", unsafe_allow_html=True)
+    with c4: st.markdown(f"<div class='custom-card'><div class='big-number-label'>저축률</div><div class='big-number-value' style='color:#FF1493'>{s_rate:.1f}%</div><div class='big-number-sub'>목표 달성 중 🚀</div></div>", unsafe_allow_html=True)
 
-    # 2. 투자 성과 (Top 5)
     st.divider()
-    st.markdown("<div class='section-title'>📈 이번 달 투자 종목 성과 (Top 5)</div>", unsafe_allow_html=True)
-    col_inv_l, col_inv_r = st.columns(2)
-    with col_inv_l:
-        st.write("**금액 기준 증가 Top 5**")
-        fig_inv1 = px.bar(x=list(m['inv_amount_top'].keys()), y=list(m['inv_amount_top'].values()), color_discrete_sequence=['#2ECC71'])
-        st.plotly_chart(fig_inv1, use_container_width=True)
-    with col_inv_r:
-        st.write("**수량 기준 증가 Top 5**")
-        fig_inv2 = px.bar(x=list(m['inv_qty_top'].keys()), y=list(m['inv_qty_top'].values()), color_discrete_sequence=['#3498DB'])
-        st.plotly_chart(fig_inv2, use_container_width=True)
 
-    # 3. 상세 지출 분석
-    st.divider()
-    st.markdown("<div class='section-title'>🔍 상세 지출 및 수입 분석</div>", unsafe_allow_html=True)
-    col_exp1, col_exp2, col_exp3 = st.columns(3)
-    with col_exp1:
-        st.write("**고정비 vs 변동비 비중**")
-        fig_e1 = px.pie(values=[m['fixed_exp'], m['var_exp']], names=['고정비', '변동비'], color_discrete_sequence=['#95A5A6', '#FF69B4'], hole=0.5)
-        st.plotly_chart(fig_e1, use_container_width=True)
-    with col_exp2:
-        st.write("**수입 분담 비율 (👸 vs 🤴)**")
-        fig_e2 = px.pie(values=[m['income_k'], m['income_d']], names=['건희(왕비)', '동현(왕)'], color_discrete_sequence=['#FF1493', '#8E44AD'])
-        st.plotly_chart(fig_e2, use_container_width=True)
-    with col_exp3:
-        st.write("**지출 카테고리 Top 5**")
-        fig_e3 = px.bar(x=list(m['exp_categories'].values()), y=list(m['exp_categories'].keys()), orientation='h', color_discrete_sequence=['#E74C3C'])
-        st.plotly_chart(fig_e3, use_container_width=True)
-
-    # 4. 재무상태 시트 기반 지표 (New)
-    st.divider()
-    st.markdown("<div class='section-title'>🧱 월말 재무 건전성 분석 (재무상태 시트 기반)</div>", unsafe_allow_html=True)
+    # 2. 투자 성과 및 비중 (표 중심)
+    st.markdown("<div class='section-title'>📈 이번 달 투자 및 자산 분석</div>", unsafe_allow_html=True)
+    col_t1, col_t2 = st.columns(2)
     
-    
+    with col_t1:
+        st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**")
+        amt_df = pd.DataFrame({"종목": list(cur['inv_amt_top5'].keys()), "증가금액(원)": list(cur['inv_amt_top5'].values())})
+        st.table(amt_df.set_index("종목"))
+        
+        st.write("**🧱 재무 건전성 지표**")
+        health_df = pd.DataFrame({
+            "지표": ["부채 비율 (LTV)", "유동성 자산 비중", "월간 자산 수익 기여도"],
+            "수치": [f"{cur['ltv']}%", f"{cur['liquidity']}%", f"{cur['return_rate']}%"]
+        })
+        st.table(health_df.set_index("지표"))
 
-    col_st1, col_st2, col_st3 = st.columns(3)
-    with col_st1:
-        st.write("**자산-부채 밸런스 (LTV)**")
-        ltv = (d['current_debt']/d['current_assets'])*100
-        fig_st1 = go.Figure(go.Indicator(mode="gauge+number", value=ltv, title={'text': "부채 비중(%)"}, gauge={'bar':{'color':"#333"}}))
-        fig_st1.update_layout(height=250)
-        st.plotly_chart(fig_st1, use_container_width=True)
-    with col_st2:
-        st.write("**유동성 vs 비유동성 비중**")
-        fig_st2 = px.pie(values=[m['liquid_assets'], m['non_liquid']], names=['유동자산', '비유동자산'], color_discrete_sequence=['#3498DB', '#BDC3C7'], hole=0.5)
-        st.plotly_chart(fig_st2, use_container_width=True)
-    with col_st3:
-        st.write("**자산 수익 기여도 (저축 vs 투자수익)**")
-        fig_st3 = px.pie(values=[savings, m['asset_return']], names=['이번달 저축', '투자 수익'], color_discrete_sequence=['#27AE60', '#F1C40F'])
-        st.plotly_chart(fig_st3, use_container_width=True)
+    with col_t2:
+        st.write("**📦 투자 종목 증가 Top 5 (수량 기준)**")
+        qty_df = pd.DataFrame({"종목": list(cur['inv_qty_top5'].keys()), "증가수량": list(cur['inv_qty_top5'].values())})
+        st.table(qty_df.set_index("종목"))
 
-    st.write("**계좌별 잔액 Top 5**")
-    fig_st4 = px.bar(x=list(m['accounts'].keys()), y=list(m['accounts'].values()), color=list(m['accounts'].keys()))
-    st.plotly_chart(fig_st4, use_container_width=True)
+        st.write("**🤝 수입 분담 및 지출 구조**")
+        flow_df = pd.DataFrame({
+            "항목": ["👸 왕비 수입", "🤴 왕 수입", "고정 지출", "변동 지출"],
+            "금액(원)": [f"{cur['inc_k']:,.0f}", f"{cur['inc_d']:,.0f}", f"{cur['fixed']:,.0f}", f"{cur['variable']:,.0f}"]
+        })
+        st.table(flow_df.set_index("항목"))
 
-# --- [탭 3] 궁금증해결 (오류 수정 완료) ---
+    st.divider()
+
+    # 3. 상세 지출 분석 (가로 막대 그래프 - 숫자 고정)
+    st.markdown("<div class='section-title'>🔍 지출 카테고리 분석 (Top 5)</div>", unsafe_allow_html=True)
+    exp_cats = {"육아용품": 1500000, "식비": 1200000, "경조사": 600000, "교통/통신": 400000, "기타": 171895}
+    fig_exp = px.bar(x=list(exp_cats.values()), y=list(exp_cats.keys()), orientation='h', 
+                     text_auto=',.0f', color=list(exp_cats.keys()), color_discrete_sequence=px.colors.qualitative.Pastel)
+    fig_exp.update_layout(showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                          xaxis_title="금액(원)", yaxis_title="", margin=dict(t=0, b=0))
+    st.plotly_chart(fig_exp, use_container_width=True)
+
+# --- [탭 3] 궁금증해결 (NameError 수정) ---
 with tab3:
     st.markdown("<div class='section-title'>💡 부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     ch, cw = st.columns(2)
     with ch:
         st.markdown("### 🤴 왕(동현) : 당장 쓸 수 있는 돈")
-        liq_total = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|ISA'))]['금액'].sum()
-        st.markdown(f"<div class='custom-card' style='text-align:center; height:150px'><h1 style='color:#8E44AD; font-size:24px'>₩ {liq_total:,.0f}</h1><p>즉시 현금화 가능 자산</p></div>", unsafe_allow_html=True)
+        liq_val = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|ISA'))]['금액'].sum()
+        st.markdown(f"<div class='custom-card' style='text-align:center; height:150px'><h1 style='color:#8E44AD; font-size:24px'>₩ {liq_val:,.0f}</h1><p>즉시 현금화 가능한 유동 자산</p></div>", unsafe_allow_html=True)
     with cw:
         st.markdown("### 👸 왕비(건희) : 목표 달성 현황")
-        inc = d['net_asset'] - d['base_net_asset']
-        prog = min(inc / 100000000, 1.0)
-        st.write(f"**🎯 1차 목표 (+1억) 달성률: {prog*100:.1f}%**")
-        st.progress(prog)
+        inc_val = d['net_asset'] - d['base_net_asset']
+        prog_val = min(inc_val / 100000000, 1.0)
+        st.write(f"**🎯 1차 목표 (+1억) 달성률: {prog_val*100:.1f}%**")
+        st.progress(prog_val)
+        st.write(f"현재까지 순수 증액분: **{inc_val:,.0f}원**")
