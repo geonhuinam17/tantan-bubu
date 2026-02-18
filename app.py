@@ -23,15 +23,20 @@ st.markdown("""
     .metric-value { font-size: 24px; font-weight: 700; color: #000000 !important; }
     .sub-text { font-size: 12px; color: #666; font-weight: 500; margin-top: 5px; }
     .highlight-text { color: #FF1493; font-weight: 800; }
+
+    /* 슬라이더 스타일 */
+    div[data-testid="stSlider"], div[data-testid="stSlider"] > div { background-color: transparent !important; }
+    .stSlider [data-baseweb="slider"] > div:first-child { background: #dee2e6 !important; }
+    .stSlider [role="slider"] { background-color: #5D4037 !important; border: 2px solid #FFFFFF !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연동 및 전처리 (D, E열 텍스트 유실 방지 로직)
+# 2. 데이터 연동 로직
 SHEET_ID = "1gcAqoVL6Y4XCh-EWrm3-Nprya3xEauLS4VckrFiBYqw"
 EXCEL_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 @st.cache_data(ttl=60)
-def load_and_sync_perfect_data():
+def load_all_tantan_data():
     try:
         all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
         s_names = list(all_sheets.keys())
@@ -44,20 +49,14 @@ def load_and_sync_perfect_data():
         "last_month_net": 108187566, "base_net_asset": 75767585, "avg_monthly_inc": 6391299 
     }
     
-    # [복구] 탭 1용 왕비(분홍) & 왕(보라) 요약 테이블 데이터
-    df_p_owner = pd.DataFrame([
-        {"보관하는 사람": "👸 왕비", "금액(원)": "65,850,668", "비중": "64.5%"},
-        {"보관하는 사람": "🤴 왕", "금액(원)": "36,290,402", "비중": "35.5%"},
-        {"보관하는 사람": "합계", "금액(원)": "102,141,070", "비중": "100.0%"}
-    ])
-    
-    # [복구] 자산 유형별 구성 (해외주식, ISA, 연금, 보험, 코인)
+    # [수정] 자산 유형별 구성 + 소유자별 컬러 테마 (분홍/보라 계열)
     df_p_type = pd.DataFrame([
-        {"유형": "해외주식", "금액": 66034743, "색상": "#FF1493"},
-        {"유형": "ISA", "금액": 10132345, "색상": "#FF69B4"},
-        {"유형": "연금저축", "금액": 16803088, "색상": "#FFB6C1"},
-        {"유형": "가상화폐", "금액": 6096394, "색상": "#8E44AD"},
-        {"유형": "종신보험", "금액": 3074500, "색상": "#D7BDE2"}
+        {"유형": "건희-해외주식", "금액": 31225286, "색상": "#FF1493"},
+        {"유형": "건희-ISA", "금액": 8651400, "색상": "#FF69B4"},
+        {"유형": "건희-연금저축", "금액": 16803088, "색상": "#FFB6C1"},
+        {"유형": "건희-가상화폐", "금액": 6096394, "색상": "#FFC0CB"},
+        {"유형": "동현-해외주식", "금액": 34809457, "색상": "#8E44AD"},
+        {"유형": "동현-ISA", "금액": 1480945, "색상": "#D7BDE2"}
     ])
     
     df_t = pd.DataFrame([
@@ -68,37 +67,37 @@ def load_and_sync_perfect_data():
     ])
     df_t['날짜'] = pd.to_datetime(df_t['날짜'])
     df_t['순자산_만원'] = (df_t['순자산'] / 10000).astype(int)
+    # [추가] 지난 달 대비 증감액 계산
+    df_t['증감'] = df_t['순자산_만원'].diff().fillna(0).astype(int)
     
-    return d, df_p_owner, df_p_type, df_t, months, all_sheets
+    return d, df_p_type, df_t, months, all_sheets
 
-d, df_p_owner, df_p_type, df_t, available_months, raw_sheets = load_and_sync_perfect_data()
+d, df_p_type, df_t, available_months, raw_sheets = load_all_tantan_data()
 
-# [스타일링 함수] D, E열 텍스트 보존 및 행 색상 1:1 재현
+# [스타일링 함수] D, E열 텍스트 복구 및 행 색상 1:1 재현
 def style_financial_sheet(df):
-    # 0. A~J열만 슬라이싱 (인덱스 에러 방지)
+    # A~J열 추출 시 강제로 텍스트로 보존해야 하는 열 지정
     df = df.iloc[:, 0:10].copy()
     
-    # 1. [핵심] D, E열(인덱스 3, 4) 텍스트 강제 변환 (0으로 변하는 것 방지)
-    # D열: 계좌/기관, E열: 종목
+    # [해결] D, E열 (인덱스 3, 4) 텍스트 데이터 강제 고정
     df.iloc[:, 3] = df.iloc[:, 3].astype(str).replace(['nan', '0', '0.0'], '')
     df.iloc[:, 4] = df.iloc[:, 4].astype(str).replace(['nan', '0', '0.0'], '')
     
     df = df.replace(".", "").fillna("")
     
-    # 2. 숫자형 컬럼 (F~J열) 포맷팅
     num_cols = df.columns[5:10] 
     for col in num_cols:
         df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     def apply_row_style(row):
         cat, sub_cat = str(row.iloc[0]), str(row.iloc[1])
-        # A. 메인 헤더 (자산, 부채, 순자산) -> 검정 배경
+        # 헤더 (검정)
         if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
-        # B. 카테고리 (유동 자산, 투자 자산 등) -> 진회색 배경
+        # 중분류 (진회색)
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
             return ['background-color: #E9ECEF; color: black; font-weight: 700'] * len(row)
-        # C. 자산 데이터 행 -> 연회색 배경
+        # 자산 데이터 (연회색)
         elif cat == '자산' and sub_cat != "":
             return ['background-color: #F8F9FA; color: black'] * len(row)
         return ['background-color: white; color: black'] * len(row)
@@ -109,7 +108,7 @@ def style_financial_sheet(df):
         df.columns[9]: "{:,.1f}"
     })
 
-# --- [UI Header] ---
+# --- [Header] ---
 st.title("🏆 탄탄부부의 경제적 자유를 위한 위대한 여정")
 st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
@@ -132,19 +131,21 @@ with t1:
         m_list = df_t['날짜'].dt.strftime('%Y-%m').tolist()
         sm, em = st.select_slider("📅 조회 월 범위 선택", options=m_list, value=(m_list[0], m_list[-1]), key="s_main")
         ft = df_t[(df_t['날짜'] >= pd.to_datetime(sm)) & (df_t['날짜'] <= pd.to_datetime(em))]
+        
+        # [수정] 지난 달 대비 증감액을 포함한 텍스트 라벨
+        labels = [f"{v:,}만\n(+{z:,})" if z > 0 else f"{v:,}만" for v, z in zip(ft['순자산_만원'], ft['증감'])]
+        
         fig_l = go.Figure()
-        fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=[f"{v:,}만" for v in ft['순자산_만원']], textposition="top center", line=dict(color='#5D4037', width=4)))
+        fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=labels, textposition="top center", line=dict(color='#5D4037', width=4)))
         fig_l.update_layout(yaxis=dict(range=[7000, ft['순자산_만원'].max()*1.15]), plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0))
         st.plotly_chart(fig_l, use_container_width=True)
         
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
-        # [복구] 왕비/왕 비중 요약 테이블
-        st.table(df_p_owner.set_index("보관하는 사람"))
-        # [복구] 전체 유형별 파이차트
+        # [복구] 건희(분홍) / 동현(보라) 자산 구분 파이차트
         fig_p = px.pie(df_p_type, names='유형', values='금액', color='유형', color_discrete_map={r['유형']: r['색상'] for _, r in df_p_type.iterrows()})
         fig_p.update_traces(textinfo="label+percent", textposition="inside", hole=0)
-        fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), showlegend=False)
+        fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), showlegend=True)
         st.plotly_chart(fig_p, use_container_width=True)
 
 # --- [탭 2] 월별 보기 ---
@@ -160,7 +161,7 @@ with t2:
     with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['f_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.divider()
-    # [복구] Top 5 수량 기준
+    # [수정] 수량 기준 정확한 Top 5
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**")
@@ -170,10 +171,10 @@ with t2:
         st.table(pd.DataFrame({"종목": ["XRP", "TQQQ", "TIGER 미국배당", "GOOGL", "Tesla"], "증가수량": ["187", "6", "5", "5", "1"]}).set_index("종목"))
 
     st.divider()
-    # [해결] A~J열 시트 그대로 가져오기 (D, E열 텍스트 및 색상 적용)
     st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
     if s_sheet in raw_sheets:
+        # [해결] D, E열 텍스트 데이터 복구 및 시트 컬러 적용
         styled_df = style_financial_sheet(raw_sheets[s_sheet])
         st.dataframe(styled_df, use_container_width=True, height=600)
 
@@ -181,10 +182,8 @@ with t2:
 with t3:
     st.markdown("<div class='section-title'>💡 탄탄부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     
-    # 왕의 가용 자산
     st.markdown("### 🤴 왕(동현)의 궁금증 : '우리 당장 쓸 수 있는 돈이 얼마야?'")
     total_liq = 82261545 
-    
     c_l1, c_l2 = st.columns([1, 1.5])
     with c_l1:
         st.markdown(f"<div class='custom-card' style='text-align:center;'><div class='metric-label'>부부 합산 즉시 가용 자산</div><div class='metric-value' style='color:#2E7D32;'>₩ {total_liq:,.0f}</div><div class='sub-text'>({sel}. 재무상태 기준)</div></div>", unsafe_allow_html=True)
@@ -194,7 +193,6 @@ with t3:
         st.table(comp.set_index("항목"))
 
     st.divider()
-    # 왕비의 목표 달성 시뮬레이션
     st.markdown("### 👸 왕비(건희)의 궁금증 : '우리 목표까지 얼마나 남았지?'")
     targets = {"1차 목표": {"amount": 175500000, "desc": "+1억 증식 (1.75억)", "plan": "2027-06"}, "2차 목표": {"amount": 200000000, "desc": "순자산 2억 돌파", "plan": "2027-12"}}
     ct1, ct2 = st.columns(2)
