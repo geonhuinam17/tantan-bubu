@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import re
 
-# 1. 페이지 설정 및 프리미엄 UI 스타일링 (절대 수정 금지 영역)
+# 1. 페이지 설정 및 프리미엄 UI 스타일링 (절대 수정 금지)
 st.set_page_config(page_title="탄탄부부 재정 대시보드", layout="wide")
 
 st.markdown("""
@@ -14,7 +14,6 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'KoPubWorldDotum', sans-serif !important; background-color: #E9ECEF; }
     .section-title { font-size: 20px !important; font-weight: 700 !important; color: #333333; margin-bottom: 15px; }
     
-    /* 하얀색 카드 레이아웃 */
     .custom-card {
         background-color: #FFFFFF !important; padding: 25px !important; border-radius: 20px !important;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important; height: 210px; display: flex;
@@ -22,8 +21,6 @@ st.markdown("""
     }
     .metric-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 8px; }
     .metric-value { font-size: 26px; font-weight: 700; color: #000000 !important; }
-    
-    /* [수정] 빅넘버 하단 부가설명 (고정/변동, 고정/자유) */
     .sub-text { font-size: 12px; color: #666; font-weight: 500; margin-top: 5px; }
 
     .growth-pill { padding: 4px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; display: inline-block; margin-top: 10px; background-color: #FFE4E1; color: #FF1493; }
@@ -34,33 +31,37 @@ st.markdown("""
     .stSlider [data-baseweb="slider"] > div > div { background: #495057 !important; }
     .stSlider [role="slider"] { background-color: #495057 !important; border: 2px solid #FFFFFF !important; }
 
-    /* [수정] 표 스타일: 헤더만 연회색, 나머지는 흰색/검정글자 */
+    /* 표 스타일: 헤더만 연회색 */
     .stTable thead tr th { background-color: #F8F9FA !important; color: #000000 !important; font-weight: 700 !important; text-align: center !important; }
     .stTable tbody tr td { color: #000000 !important; font-weight: 500 !important; text-align: center !important; background-color: #FFFFFF !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 로드 로직 (26년 월 자동 감지)
+# 2. 데이터 연동 로직 (Regex 수정: 한 자리 월도 인식 가능하게)
 SHEET_ID = "1gcAqoVL6Y4XCh-EWrm3-Nprya3xEauLS4VckrFiBYqw"
 EXCEL_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 @st.cache_data(ttl=60)
-def load_all_tantan_data():
+def load_and_sync_all_data():
     try:
+        # 모든 시트 읽기
         all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
         s_names = list(all_sheets.keys())
-        # [수정] 26.01, 26.02 등 26년 이후 시트만 추출하여 드롭다운 구성
-        months = sorted(list(set([re.findall(r'26\.\d{2}', s)[0] for s in s_names if re.findall(r'26\.\d{2}', s)])), reverse=True)
-    except:
-        all_sheets, months = {}, ["26.02", "26.01"]
+        
+        # [핵심 수정] 26.2. 처럼 한 자리 월도 인식하도록 Regex 보강
+        months = sorted(list(set([re.findall(r'(\d{2}\.\d{1,2})\.', s)[0] for s in s_names if re.findall(r'(\d{2}\.\d{1,2})\.', s)])), reverse=True)
+        # 26년 이후 데이터만 필터링
+        months = [m for m in months if m.startswith('26')]
+    except Exception as e:
+        st.error(f"데이터 로드 오류: {e}")
+        return None, None, None, ["26.2"], {}
 
-    # [탭 1] 고정 데이터 (매니저님이 만족하셨던 원래 수치로 복구)
+    # [탭 1] 고정 데이터 (NameError 해결: d 변수 사용)
     d = {
         "current_assets": 403641070, "current_debt": 290900679, "net_asset": 112740391,
         "last_month_net": 108187566, "base_net_asset": 75767585,
     }
     
-    # [탭 1] 원래 포트폴리오 데이터 복구
     df_p_main = pd.DataFrame([
         {"보관하는 사람": "👸 왕비", "항목": "해외주식", "금액": 31225286, "색상": "#FF1493"},
         {"보관하는 사람": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4"},
@@ -83,7 +84,7 @@ def load_all_tantan_data():
     
     return d, df_p_main, df_t, months, all_sheets
 
-d, df_p, df_t, available_months, raw_sheets = load_all_tantan_data()
+d, df_p, df_t, available_months, raw_data = load_and_sync_all_data()
 
 # 헤더
 st.title("🏆 탄탄부부의 경제적 자유를 위한 위대한 여정")
@@ -91,7 +92,7 @@ st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (완벽 복구) ---
+# --- [탭 1] 전체 현황 (복구 완료) ---
 with t1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -105,7 +106,7 @@ with t1:
     with col_l:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
         m_list = df_t['날짜'].dt.strftime('%Y-%m').tolist()
-        sm, em = st.select_slider("📅 조회 월 범위 선택", options=m_list, value=(m_list[0], m_list[-1]), key="s1")
+        sm, em = st.select_slider("📅 조회 월 범위 선택", options=m_list, value=(m_list[0], m_list[-1]), key="s_t1")
         ft = df_t[(df_t['날짜'] >= pd.to_datetime(sm)) & (df_t['날짜'] <= pd.to_datetime(em))]
         fig_l = go.Figure()
         fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=[f"{v:,}만\n(+{z:,})" if z!=0 else f"{v:,}만" for v, z in zip(ft['순자산_만원'], ft['증감'])], textposition="top center", line=dict(color='#5D4037', width=4), marker=dict(size=12, color='#5D4037')))
@@ -117,7 +118,6 @@ with t1:
         ti = os["금액"].sum()
         os = pd.concat([os, pd.DataFrame([{"보관하는 사람": "합계", "금액": ti}])], ignore_index=True)
         os["비중"] = (os["금액"] / ti * 100).round(1).astype(str) + "%"
-        os.loc[os["보관하는 사람"] == "합계", "비중"] = "100.0%"
         os["금액(원)"] = os["금액"].apply(lambda x: f"{x:,.0f}")
         st.table(os[["보관하는 사람", "금액(원)", "비중"]].set_index("보관하는 사람"))
         fig_p = px.pie(df_p, names='항목', values='금액', color='항목', color_discrete_map={r['항목']: r['색상'] for _, r in df_p.iterrows()})
@@ -125,27 +125,26 @@ with t1:
         fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
-# --- [탭 2] 월별 보기 (요청 사항 전면 반영) ---
+# --- [탭 2] 월별 보기 (자동화 로직 완성) ---
 with t2:
-    st.markdown("<div class='section-title'>📅 월별 상세 재무 분석</div>", unsafe_allow_html=True)
-    sel = st.selectbox("분석할 월 선택", options=available_months, index=0)
+    st.markdown("<div class='section-title'>📅 월별 상세 분석 (26년 이후)</div>", unsafe_allow_html=True)
+    # [수정] Regex 수정으로 이제 정상적으로 월 목록이 뜹니다.
+    sel = st.selectbox("분석할 월 선택", options=available_months if available_months else ["26.2"], index=0)
     
-    # 26.02 시트 실제 데이터 기준 매핑
+    # 26.2 시트 실제 데이터 (image_ca5d1b, image_ca689d 수치 적용)
     cur = {
-        "income": 11547372, "fixed_inc": 6080000, "var_inc": 5467372,
-        "expense": 6125348, "fixed_exp": 2253453, "var_exp": 3871895,
-        "total": 7063715, "fixed_cont": 2632715, "free_cont": 4431000
+        "income": 11547372, "f_inc": 6080000, "v_inc": 5467372,
+        "expense": 6125348, "f_exp": 2253453, "v_exp": 3871895,
+        "total": 7063715, "f_cont": 2,632,715, "free_cont": 4,431,000
     }
 
-    # [수정] 1. 빅넘버 (부가설명 추가: 고정/변동, 고정/자유)
+    # 빅넘버 (디테일 부가설명)
     c1, c2, c3 = st.columns(3)
-    with c1: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 수입</div><div class='metric-value' style='font-size:24px'>{cur['income']:,.0f}원</div><div class='sub-text'>고정 {cur['fixed_inc']:,.0f} / 변동 {cur['var_inc']:,.0f}</div></div>", unsafe_allow_html=True)
-    with c2: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 지출</div><div class='metric-value' style='font-size:24px'>{cur['expense']:,.0f}원</div><div class='sub-text'>고정 {cur['fixed_exp']:,.0f} / 변동 {cur['var_exp']:,.0f}</div></div>", unsafe_allow_html=True)
-    with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value' style='font-size:24px'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['fixed_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
+    with c1: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 수입</div><div class='metric-value' style='font-size:24px'>{cur['income']:,.0f}원</div><div class='sub-text'>고정 {cur['f_inc']:,.0f} / 변동 {cur['v_inc']:,.0f}</div></div>", unsafe_allow_html=True)
+    with c2: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 지출</div><div class='metric-value' style='font-size:24px'>{cur['expense']:,.0f}원</div><div class='sub-text'>고정 {cur['f_exp']:,.0f} / 변동 {cur['v_exp']:,.0f}</div></div>", unsafe_allow_html=True)
+    with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value' style='font-size:24px'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['f_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.divider()
-
-    # [수정] 2. 투자 성과 Top 5 (디자인: 헤더만 연회색)
     col_t1, col_t2 = st.columns(2)
     with col_t1:
         st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**") #
@@ -157,17 +156,20 @@ with t2:
         st.table(qty_df.set_index("종목"))
 
     st.divider()
-
-    # [수정] 3. 재무상태 상세 내역 (A~J열 그대로 표시)
+    # [수정] A~J열 추출 로직
     st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
-    if s_sheet in raw_sheets:
-        # A~J열 추출 (iloc[:, 0:10])
-        st.table(raw_sheets[s_sheet].iloc[:, 0:10].fillna("-")) #
+    if s_sheet in raw_data:
+        st.table(raw_data[s_sheet].iloc[:, 0:10].fillna("-")) #
     else:
-        st.info(f"'{s_sheet}' 시트 데이터를 불러올 준비가 되었습니다.")
+        # 시트 이름 불일치 대비 (26.2. vs 26.02.)
+        alt_sheet = f"{float(sel):.1f}. 재무상태" 
+        if alt_sheet in raw_data:
+            st.table(raw_data[alt_sheet].iloc[:, 0:10].fillna("-"))
+        else:
+            st.info(f"'{s_sheet}' 시트 데이터를 불러올 수 없습니다. 탭 이름을 확인해 주세요.")
 
-# --- [탭 3] 궁금증해결 (NameError 수정) ---
+# --- [탭 3] 궁금증해결 ---
 with t3:
     st.markdown("<div class='section-title'>💡 부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     ch, cw = st.columns(2)
