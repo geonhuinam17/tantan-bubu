@@ -23,23 +23,15 @@ st.markdown("""
     .metric-value { font-size: 24px; font-weight: 700; color: #000000 !important; }
     .sub-text { font-size: 12px; color: #666; font-weight: 500; margin-top: 5px; }
     .highlight-text { color: #FF1493; font-weight: 800; }
-
-    /* 슬라이더 스타일 (갈색 테마 유지) */
-    div[data-testid="stSlider"], div[data-testid="stSlider"] > div { background-color: transparent !important; }
-    .stSlider [data-baseweb="slider"] > div:first-child { background: #dee2e6 !important; }
-    .stSlider [role="slider"] { background-color: #5D4037 !important; border: 2px solid #FFFFFF !important; }
-
-    /* 표 텍스트 중앙 정렬 */
-    .stTable tbody tr td { color: #000000 !important; text-align: center !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연동 및 전처리 로직 (D, E열 텍스트 보존)
+# 2. 데이터 연동 및 전처리 (D, E열 텍스트 유실 방지 로직)
 SHEET_ID = "1gcAqoVL6Y4XCh-EWrm3-Nprya3xEauLS4VckrFiBYqw"
 EXCEL_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 @st.cache_data(ttl=60)
-def load_all_tantan_data():
+def load_and_sync_perfect_data():
     try:
         all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
         s_names = list(all_sheets.keys())
@@ -59,12 +51,12 @@ def load_all_tantan_data():
         {"보관하는 사람": "합계", "금액(원)": "102,141,070", "비중": "100.0%"}
     ])
     
-    # [수정] 파이차트용 전체 자산 유형별 구성 (해외주식, ISA, 연금, 보험, 코인 합산)
+    # [복구] 자산 유형별 구성 (해외주식, ISA, 연금, 보험, 코인)
     df_p_type = pd.DataFrame([
-        {"유형": "해외주식", "금액": 66034743, "색상": "#FF1493"}, # 핑크 계열
+        {"유형": "해외주식", "금액": 66034743, "색상": "#FF1493"},
         {"유형": "ISA", "금액": 10132345, "색상": "#FF69B4"},
         {"유형": "연금저축", "금액": 16803088, "색상": "#FFB6C1"},
-        {"유형": "가상화폐", "금액": 6096394, "색상": "#8E44AD"}, # 보라 계열
+        {"유형": "가상화폐", "금액": 6096394, "색상": "#8E44AD"},
         {"유형": "종신보험", "금액": 3074500, "색상": "#D7BDE2"}
     ])
     
@@ -79,47 +71,51 @@ def load_all_tantan_data():
     
     return d, df_p_owner, df_p_type, df_t, months, all_sheets
 
-d, df_p_owner, df_p_type, df_t, available_months, raw_sheets = load_all_tantan_data()
+d, df_p_owner, df_p_type, df_t, available_months, raw_sheets = load_and_sync_perfect_data()
 
-# [함수] 재무상태 표 스타일링 (D, E열 텍스트 복구 및 시트 색상 1:1 재현)
+# [스타일링 함수] D, E열 텍스트 보존 및 행 색상 1:1 재현
 def style_financial_sheet(df):
-    # D, E열 (인덱스 2, 3) 텍스트 데이터 강제 고정 (0 방지)
-    df.iloc[:, 2] = df.iloc[:, 2].astype(str).replace(['nan', '0', '0.0'], '')
+    # 0. A~J열만 슬라이싱 (인덱스 에러 방지)
+    df = df.iloc[:, 0:10].copy()
+    
+    # 1. [핵심] D, E열(인덱스 3, 4) 텍스트 강제 변환 (0으로 변하는 것 방지)
+    # D열: 계좌/기관, E열: 종목
     df.iloc[:, 3] = df.iloc[:, 3].astype(str).replace(['nan', '0', '0.0'], '')
+    df.iloc[:, 4] = df.iloc[:, 4].astype(str).replace(['nan', '0', '0.0'], '')
     
     df = df.replace(".", "").fillna("")
     
-    # 숫자형 컬럼 (당기 금액, 수량 등) 처리
-    num_cols = df.columns[4:10] 
+    # 2. 숫자형 컬럼 (F~J열) 포맷팅
+    num_cols = df.columns[5:10] 
     for col in num_cols:
         df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     def apply_row_style(row):
         cat, sub_cat = str(row.iloc[0]), str(row.iloc[1])
-        # 1. 메인 헤더 (자산, 부채, 순자산) -> 검정 배경/흰 글씨
+        # A. 메인 헤더 (자산, 부채, 순자산) -> 검정 배경
         if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
-        # 2. 카테고리 (유동 자산, 투자 자산 등) -> 진회색 배경
+        # B. 카테고리 (유동 자산, 투자 자산 등) -> 진회색 배경
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
             return ['background-color: #E9ECEF; color: black; font-weight: 700'] * len(row)
-        # 3. 데이터 행 -> 연회색 배경
+        # C. 자산 데이터 행 -> 연회색 배경
         elif cat == '자산' and sub_cat != "":
             return ['background-color: #F8F9FA; color: black'] * len(row)
         return ['background-color: white; color: black'] * len(row)
 
     return df.style.apply(apply_row_style, axis=1).format({
-        df.columns[4]: "{:,.0f}", df.columns[5]: "{:,.0f}",
-        df.columns[6]: "{:,.0f}", df.columns[7]: "{:,.0f}",
-        df.columns[8]: "{:,.0f}", df.columns[9]: "{:,.1f}"
+        df.columns[5]: "{:,.0f}", df.columns[6]: "{:,.0f}",
+        df.columns[7]: "{:,.0f}", df.columns[8]: "{:,.0f}",
+        df.columns[9]: "{:,.1f}"
     })
 
-# --- [Header] ---
+# --- [UI Header] ---
 st.title("🏆 탄탄부부의 경제적 자유를 위한 위대한 여정")
 st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (테이블 & 유형별 파이차트 복구) ---
+# --- [탭 1] 전체 현황 ---
 with t1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -143,16 +139,15 @@ with t1:
         
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
-        # [복구] 왕비(분홍)/왕(보라) 요약 테이블
+        # [복구] 왕비/왕 비중 요약 테이블
         st.table(df_p_owner.set_index("보관하는 사람"))
-        
-        # [수정] 자산 유형별 꽉 찬 파이차트 (해외주식+ISA+연금+보험+코인)
+        # [복구] 전체 유형별 파이차트
         fig_p = px.pie(df_p_type, names='유형', values='금액', color='유형', color_discrete_map={r['유형']: r['색상'] for _, r in df_p_type.iterrows()})
         fig_p.update_traces(textinfo="label+percent", textposition="inside", hole=0)
         fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
-# --- [탭 2] 월별 보기 (D, E열 텍스트 복구) ---
+# --- [탭 2] 월별 보기 ---
 with t2:
     st.markdown("<div class='section-title'>📅 월별 상세 재무 분석</div>", unsafe_allow_html=True)
     sel = st.selectbox("분석할 월 선택", options=available_months, index=0)
@@ -165,7 +160,7 @@ with t2:
     with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['f_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.divider()
-    # [복구] Top 5 수량 기준 (SCHD 오류 수정: XRP 1위)
+    # [복구] Top 5 수량 기준
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**")
@@ -175,14 +170,14 @@ with t2:
         st.table(pd.DataFrame({"종목": ["XRP", "TQQQ", "TIGER 미국배당", "GOOGL", "Tesla"], "증가수량": ["187", "6", "5", "5", "1"]}).set_index("종목"))
 
     st.divider()
+    # [해결] A~J열 시트 그대로 가져오기 (D, E열 텍스트 및 색상 적용)
     st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
     if s_sheet in raw_sheets:
-        # [해결] D, E열 텍스트 복구 및 시트 색상 테마 완벽 적용
-        styled_df = style_financial_sheet(raw_sheets[s_sheet].iloc[:, 0:10])
+        styled_df = style_financial_sheet(raw_sheets[s_sheet])
         st.dataframe(styled_df, use_container_width=True, height=600)
 
-# --- [탭 3] 궁금증해결 (시뮬레이션) ---
+# --- [탭 3] 궁금증해결 ---
 with t3:
     st.markdown("<div class='section-title'>💡 탄탄부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     
@@ -194,13 +189,12 @@ with t3:
     with c_l1:
         st.markdown(f"<div class='custom-card' style='text-align:center;'><div class='metric-label'>부부 합산 즉시 가용 자산</div><div class='metric-value' style='color:#2E7D32;'>₩ {total_liq:,.0f}</div><div class='sub-text'>({sel}. 재무상태 기준)</div></div>", unsafe_allow_html=True)
     with c_l2:
-        st.write("**💰 가용 자산 상세 구성 (해외주식/ISA/코인 등)**")
+        st.write("**💰 가용 자산 상세 구성**")
         comp = pd.DataFrame({"항목": ["해외주식(부부합산)", "ISA(부부합산)", "가상화폐(건희)", "예금통장(부부합산)"], "금액": ["66,034,743", "10,132,345", "6,096,394", "8,500,000"]})
         st.table(comp.set_index("항목"))
 
     st.divider()
-
-    # 왕비의 목표 시뮬레이션
+    # 왕비의 목표 달성 시뮬레이션
     st.markdown("### 👸 왕비(건희)의 궁금증 : '우리 목표까지 얼마나 남았지?'")
     targets = {"1차 목표": {"amount": 175500000, "desc": "+1억 증식 (1.75억)", "plan": "2027-06"}, "2차 목표": {"amount": 200000000, "desc": "순자산 2억 돌파", "plan": "2027-12"}}
     ct1, ct2 = st.columns(2)
@@ -212,4 +206,4 @@ with t3:
             st.markdown(f"#### {name} : {target['desc']}")
             st.markdown(f"계획: **{target['plan']}** | 달성률: <span class='highlight-text'>{rate:.1f}%</span>", unsafe_allow_html=True)
             st.progress(min(rate/100, 1.0))
-            st.markdown(f"<div class='custom-card' style='height:140px; margin-top:10px;'><div class='metric-label'>예상 달성 시점</div><div class='metric-value' style='font-size:22px;'>🚀 {est_date.strftime('%Y년 %m월')}</div><div class='sub-text'>(월평균 증식 {d['avg_monthly_inc']:,.0f}원 기준)</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='custom-card' style='height:140px; margin-top:10px;'><div class='metric-label'>예상 달성 시점</div><div class='metric-value' style='font-size:22px;'>🚀 {est_date.strftime('%Y년 %m월')}</div><div class='sub-text'>(월평균 증액 {d['avg_monthly_inc']:,.0f}원 기준)</div></div>", unsafe_allow_html=True)
