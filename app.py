@@ -24,20 +24,20 @@ st.markdown("""
         margin-bottom: 15px;
     }
 
-    /* [핵심 수정] 하얀색 카드: 높이를 190px로 높여 순자산이 튀어나오지 않게 함 */
+    /* [완전 해결] 하얀색 카드: 높이를 210px로 충분히 확보하여 절대 튀어나오지 않게 함 */
     .custom-card {
         background-color: #FFFFFF !important;
         padding: 25px !important;
         border-radius: 20px !important;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
-        height: 190px;
+        height: 210px;
         display: flex;
         flex-direction: column;
         justify-content: center;
-        margin-bottom: 10px;
+        overflow: hidden;
     }
 
-    /* 지표 텍스트 설정: 부채 포함 모든 지표 검정색 통일 */
+    /* 지표 텍스트 설정: 모든 지표 검정색 통일 */
     .metric-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 8px; }
     .metric-value { font-size: 26px; font-weight: 700; color: #000000 !important; }
 
@@ -53,7 +53,7 @@ st.markdown("""
     .pink-pill { background-color: #FFE4E1; color: #FF1493; }
     .blue-pill { background-color: #E0F2F1; color: #00796B; }
 
-    /* [완전 박멸] 슬라이더 회색 박스 제거 및 선 색상만 진회색 */
+    /* 슬라이더 회색 박스 제거 및 선 색상만 진회색 */
     div[data-testid="stSlider"], div[data-testid="stSlider"] > div {
         background-color: transparent !important;
         background: none !important;
@@ -70,11 +70,15 @@ st.markdown("""
         border: 2px solid #FFFFFF !important;
     }
 
-    /* [수정] 표 스타일: 모든 글자 검정색 고정 및 텍스트 정렬 */
+    /* 표 스타일: 모든 글자 검정색 고정 및 굵기 강조 */
     .stTable td, .stTable th, .stTable tr {
         color: #000000 !important;
         font-weight: 600 !important;
-        text-align: center !important;
+    }
+    /* 합계 행 강조 */
+    .stTable tr:last-child {
+        background-color: #f8f9fa;
+        font-weight: 800 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -122,7 +126,7 @@ with tab1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     
-    # [수정] 총 부채에서 마이너스(-) 제거 및 검정색 통일
+    # [수정] 부채 마이너스 제거 및 모든 수치 검정색 고정
     with c1:
         st.markdown(f"""<div class='custom-card'><div class='metric-label'>총 자산</div><div class='metric-value'>{d['current_assets']:,.0f}원</div></div>""", unsafe_allow_html=True)
     with c2:
@@ -148,7 +152,6 @@ with tab1:
         months = df_t['날짜'].dt.strftime('%Y-%m').tolist()
         chart_placeholder = st.empty()
 
-        # [수정] 하단 슬라이더: 배경 완전 투명, 선만 진회색
         start_m, end_m = st.select_slider("📅 조회 월 범위 선택", options=months, value=(months[0], months[-1]))
         f_t = df_t[(df_t['날짜'] >= pd.to_datetime(start_m)) & (df_t['날짜'] <= pd.to_datetime(end_m))]
         
@@ -168,20 +171,29 @@ with tab1:
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         
-        # [수정] 소유주 -> 보관하는 사람 명칭 변경 및 모든 글자 검정색 표
+        # [수정] '보관하는 사람' 명칭 사용 및 하단 '합계' 행 추가
         owner_summary = df_p.groupby("소유주")["금액"].sum().reset_index()
-        owner_summary.rename(columns={"소유주": "보관하는 사람"}, inplace=True)
         total_inv = owner_summary["금액"].sum()
+        
+        # 합계 데이터 생성
+        total_row = pd.DataFrame([{"소유주": "합계", "금액": total_inv}])
+        owner_summary = pd.concat([owner_summary, total_row], ignore_index=True)
+        
+        owner_summary.rename(columns={"소유주": "보관하는 사람"}, inplace=True)
         owner_summary["비중"] = (owner_summary["금액"] / total_inv * 100).round(1).astype(str) + "%"
+        owner_summary.loc[owner_summary["보관하는 사람"] == "합계", "비중"] = "100.0%"
         owner_summary["금액(원)"] = owner_summary["금액"].apply(lambda x: f"{x:,.0f}")
+        
         st.table(owner_summary[["보관하는 사람", "금액(원)", "비중"]].set_index("보관하는 사람"))
 
+        # [수정] 파이차트 내 글자 수평 고정 (insidetextorientation='horizontal')
         fig_pie = px.pie(df_p, names='항목', values='금액',
                          color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
         fig_pie.update_traces(
             textinfo="label+percent+value", 
             texttemplate="%{label}<br>%{percent}<br>₩%{value:,.0f}",
-            textposition="inside"
+            textposition="inside",
+            insidetextorientation='horizontal' # 수평 고정
         )
         fig_pie.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_pie, use_container_width=True)
