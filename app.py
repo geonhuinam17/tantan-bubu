@@ -95,7 +95,7 @@ with tab1:
     col_l, col_r = st.columns([1, 1.2])
     
     with col_l:
-        st.write("**투자 자산 구성 (👸👸🤴🤴)**")
+        st.write("**투자 자산 구성**")
         fig_pie = px.sunburst(df_p, path=['소유주', '항목'], values='금액',
                               color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
         fig_pie.update_traces(textinfo="label+percent root+value", insidetextorientation='horizontal')
