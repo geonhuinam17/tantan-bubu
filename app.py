@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import re
 
-# 1. 페이지 설정 및 프리미엄 UI 스타일링 (디자인 정체성 복구)
+# 1. 페이지 설정 및 프리미엄 UI 스타일링
 st.set_page_config(page_title="탄탄부부 재정 대시보드", layout="wide")
 
 st.markdown("""
@@ -23,10 +23,18 @@ st.markdown("""
     .metric-value { font-size: 24px; font-weight: 700; color: #000000 !important; }
     .sub-text { font-size: 12px; color: #666; font-weight: 500; margin-top: 5px; }
     .highlight-text { color: #FF1493; font-weight: 800; }
+
+    /* 슬라이더 스타일 (갈색 테마 유지) */
+    div[data-testid="stSlider"], div[data-testid="stSlider"] > div { background-color: transparent !important; }
+    .stSlider [data-baseweb="slider"] > div:first-child { background: #dee2e6 !important; }
+    .stSlider [role="slider"] { background-color: #5D4037 !important; border: 2px solid #FFFFFF !important; }
+
+    /* 표 텍스트 중앙 정렬 */
+    .stTable tbody tr td { color: #000000 !important; text-align: center !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연동 및 전처리 로직 (D, E열 텍스트 보존 강화)
+# 2. 데이터 연동 및 전처리 (D, E열 텍스트 데이터 보존)
 SHEET_ID = "1gcAqoVL6Y4XCh-EWrm3-Nprya3xEauLS4VckrFiBYqw"
 EXCEL_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
@@ -44,13 +52,10 @@ def load_all_tantan_data():
         "last_month_net": 108187566, "base_net_asset": 75767585, "avg_monthly_inc": 6391299 
     }
     
-    # [수정] 파이차트용 전체 투자 자산 구성 (해외주식/ISA/연금/보험/코인 통합)
+    # [복구] 왕비(분홍) & 왕(보라) 컬러 테마 데이터
     df_p_main = pd.DataFrame([
-        {"항목": "해외주식", "금액": 66034743, "색상": "#FF1493"},
-        {"항목": "ISA", "금액": 10132345, "색상": "#FF69B4"},
-        {"항목": "연금저축", "금액": 16803088, "색상": "#FFB6C1"},
-        {"항목": "가상화폐", "금액": 6096394, "색상": "#8E44AD"},
-        {"항목": "종신보험", "금액": 3074500, "색상": "#D7BDE2"}
+        {"보관하는 사람": "👸 왕비", "금액": 65850668, "색상": "#FF1493"},
+        {"보관하는 사람": "🤴 왕", "금액": 36290402, "색상": "#8E44AD"}
     ])
     
     df_t = pd.DataFrame([
@@ -66,25 +71,25 @@ def load_all_tantan_data():
 
 d, df_p, df_t, available_months, raw_sheets = load_all_tantan_data()
 
-# [함수] 재무상태 표 스타일링 (D, E열 텍스트 강제 고정 및 시트 색상 재현)
+# [함수] 재무상태 표 스타일링 (D, E열 텍스트 복구 및 색상 재현)
 def style_financial_sheet(df):
-    # D, E열 (인덱스 2, 3) 텍스트 데이터 보존 (0으로 변하는 현상 방지)
+    # D, E열 (인덱스 2, 3) 텍스트 강제 보존 (0으로 변하는 현상 방지)
     df.iloc[:, 2] = df.iloc[:, 2].astype(str).replace(['nan', '0', '0.0'], '')
     df.iloc[:, 3] = df.iloc[:, 3].astype(str).replace(['nan', '0', '0.0'], '')
     
     df = df.replace(".", "").fillna("")
     
-    # 숫자형 컬럼 (당기 금액, 수량 등) 처리
+    # 숫자형 컬럼 처리 (F~I열)
     num_cols = df.columns[4:9] 
     for col in num_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     def apply_row_style(row):
         cat, sub_cat = str(row.iloc[0]), str(row.iloc[1])
-        # 1. 자산/부채/순자산 헤더 (검정 배경)
+        # 1. 헤더 (검정 배경)
         if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
-        # 2. 유동/투자/비유동 카테고리 (진회색 배경)
+        # 2. 중분류 (진회색 배경)
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
             return ['background-color: #E9ECEF; color: black; font-weight: 700'] * len(row)
         # 3. 데이터 행 (연회색 배경)
@@ -104,7 +109,7 @@ st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (파이차트 복구) ---
+# --- [탭 1] 전체 현황 (테이블 + 파이차트 복구) ---
 with t1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -125,10 +130,18 @@ with t1:
         fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=[f"{v:,}만" for v in ft['순자산_만원']], textposition="top center", line=dict(color='#5D4037', width=4)))
         fig_l.update_layout(yaxis=dict(range=[7000, ft['순자산_만원'].max()*1.15]), plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0))
         st.plotly_chart(fig_l, use_container_width=True)
+        
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
-        # [수정] 도넛 구멍 없는 꽉 찬 파이차트 복구
-        fig_p = px.pie(df_p, names='항목', values='금액', color='항목', color_discrete_map={r['항목']: r['색상'] for _, r in df_p.iterrows()})
+        # [복구] 왕비/왕 비중 요약 테이블
+        st.table(pd.DataFrame([
+            {"보관하는 사람": "👸 왕비", "금액(원)": "65,850,668", "비중": "64.5%"},
+            {"보관하는 사람": "🤴 왕", "금액(원)": "36,290,402", "비중": "35.5%"},
+            {"보관하는 사람": "합계", "금액(원)": "102,141,070", "비중": "100.0%"}
+        ]).set_index("보관하는 사람"))
+        
+        # [복구] 핑크 & 보라 테마 파이차트
+        fig_p = px.pie(df_p, names='보관하는 사람', values='금액', color='보관하는 사람', color_discrete_sequence=['#FF1493', '#8E44AD'])
         fig_p.update_traces(textinfo="label+percent", textposition="inside", hole=0)
         fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
@@ -146,7 +159,6 @@ with t2:
     with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['f_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.divider()
-    # [수정] Top 5 수량 기준 오류 수정 (XRP 1위 유지)
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**")
@@ -167,7 +179,7 @@ with t2:
 with t3:
     st.markdown("<div class='section-title'>💡 탄탄부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     
-    # 왕의 가용 자산 (부부 합산)
+    # 왕의 가용 자산
     st.markdown("### 🤴 왕(동현)의 궁금증 : '우리 당장 쓸 수 있는 돈이 얼마야?'")
     total_liq = 82261545 
     
