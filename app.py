@@ -31,7 +31,7 @@ st.markdown("""
     .stSlider [data-baseweb="slider"] > div > div { background: #495057 !important; }
     .stSlider [role="slider"] { background-color: #495057 !important; border: 2px solid #FFFFFF !important; }
 
-    /* 표 텍스트 기본 설정 */
+    /* 표 텍스트 중앙 정렬 및 기본 색상 */
     .stTable tbody tr td { color: #000000 !important; text-align: center !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -45,11 +45,10 @@ def load_and_sync_data():
     try:
         all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
         s_names = list(all_sheets.keys())
-        months = sorted(list(set([re.findall(r'(26\.\d{1,2})\.', s)[0] for s in s_names if re.findall(r'(26\.\d{1,2})\.', s)])), key=lambda x: float(x), reverse=True)
+        months = sorted(list(set([re.findall(r'(\d{2}\.\d{1,2})\.', s)[0] for s in s_names if re.findall(r'(\d{2}\.\d{1,2})\.', s)])), key=lambda x: float(x), reverse=True)
     except:
         all_sheets, months = {}, ["26.2"]
 
-    # [탭 1] 고정 데이터
     d = {
         "current_assets": 403641070, "current_debt": 290900679, "net_asset": 112740391,
         "last_month_net": 108187566, "base_net_asset": 75767585,
@@ -79,32 +78,49 @@ def load_and_sync_data():
 
 d, df_p, df_t, available_months, raw_sheets = load_and_sync_data()
 
-# [함수 추가] 재무상태 표 스타일링 및 포맷팅 (소수점 제거)
+# [함수 수정] 재무상태 표 스타일링 및 천 단위 콤마 적용
 def style_financial_sheet(df):
-    # 1. 점(dot) 및 공란 처리
+    # 1. 공란 점(.) 제거 및 전처리
     df = df.replace(".", "").fillna("")
     
-    # 2. F~I열 (인덱스 5~8) 정수 변환 로직
-    cols_to_fix = df.columns[5:9] # F, G, H, I
-    for col in cols_to_fix:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        # 0인 값은 다시 빈 문자열로 처리하여 가독성 향상
-        df[col] = df[col].replace(0, "")
+    # 2. 숫자형 컬럼 선택 및 콤마 포맷팅 준비
+    # D열(3번)부터 J열(9번)까지 숫자 변환 시도
+    num_cols = df.columns[3:10]
+    for col in num_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
+    # 3. 행별 스타일 정의 로직
     def apply_row_style(row):
-        cat = str(row.iloc[0]) # 구분
-        sub_cat = str(row.iloc[1]) # 세부 항목
-        if cat in ['자산', '부채', '순자산']:
+        cat = str(row.iloc[0])     # A열: 구분
+        sub_cat = str(row.iloc[1]) # B열: 세부 항목
+        
+        # 메인 헤더 (자산, 부채, 순자산)
+        if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
+        # 중분류 (유동 자산, 투자 자산 등)
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
             return ['background-color: #E9ECEF; color: black; font-weight: 700'] * len(row)
+        # [추가 요청] 자산에 내용이 작성된 행 -> 연한 회색 배경
+        elif cat == '자산' and sub_cat != "":
+            return ['background-color: #F8F9FA; color: black'] * len(row)
+        
         return ['background-color: white; color: black'] * len(row)
 
-    return df.style.apply(apply_row_style, axis=1)
+    # 4. 스타일 적용 및 숫자 포맷팅(콤마) 적용
+    styled = df.style.apply(apply_row_style, axis=1).format({
+        df.columns[3]: "{:,.0f}", # 현재가액
+        df.columns[4]: "{:,.0f}", # 전월가액
+        df.columns[5]: "{:,.0f}", # 증감액
+        df.columns[6]: "{:,.0f}", # 비중
+        df.columns[7]: "{:,.0f}", # 수량
+        df.columns[8]: "{:,.0f}", # 평균단가
+        df.columns[9]: "{:,.1f}"  # 수익률 (소수점 1자리 유지)
+    })
+    return styled
 
 t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (완벽 복구) ---
+# --- [탭 1] 전체 현황 (완벽 보존) ---
 with t1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -137,7 +153,7 @@ with t1:
         fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
-# --- [탭 2] 월별 보기 (F~I열 정수 변환 및 스타일 재현) ---
+# --- [탭 2] 월별 보기 (디자인 및 포맷팅 고도화) ---
 with t2:
     st.markdown("<div class='section-title'>📅 월별 상세 재무 분석</div>", unsafe_allow_html=True)
     sel = st.selectbox("분석할 월 선택", options=available_months, index=0)
@@ -149,7 +165,7 @@ with t2:
         "total": 7063715, "f_cont": 2632715, "free_cont": 4431000
     }
 
-    # 빅넘버
+    # 빅넘버 (상세 부가설명 포함)
     c1, c2, c3 = st.columns(3)
     with c1: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 수입</div><div class='metric-value' style='font-size:24px'>{cur['income']:,.0f}원</div><div class='sub-text'>고정 {cur['f_inc']:,.0f} / 변동 {cur['v_inc']:,.0f}</div></div>", unsafe_allow_html=True)
     with c2: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 지출</div><div class='metric-value' style='font-size:24px'>{cur['expense']:,.0f}원</div><div class='sub-text'>고정 {cur['f_exp']:,.0f} / 변동 {cur['v_exp']:,.0f}</div></div>", unsafe_allow_html=True)
@@ -167,13 +183,13 @@ with t2:
         st.table(qty_df.set_index("종목"))
 
     st.divider()
-    # [핵심] 재무상태 상세 내역 스타일 및 정수 포맷팅 적용
+    # [수정] 천 단위 콤마와 자산 행 하이라이트가 적용된 표
     st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
     if s_sheet in raw_sheets:
         status_df = raw_sheets[s_sheet].iloc[:, 0:10]
         styled_df = style_financial_sheet(status_df)
-        st.dataframe(styled_df, use_container_width=True, height=600) #
+        st.dataframe(styled_df, use_container_width=True, height=600)
     else:
         st.info(f"'{s_sheet}' 시트 데이터를 불러올 준비가 되었습니다.")
 
