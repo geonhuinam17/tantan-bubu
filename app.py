@@ -14,7 +14,6 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'KoPubWorldDotum', sans-serif !important; background-color: #E9ECEF; }
     .section-title { font-size: 20px !important; font-weight: 700 !important; color: #333333; margin-bottom: 15px; }
     
-    /* 하얀색 카드 레이아웃 */
     .custom-card {
         background-color: #FFFFFF !important; padding: 25px !important; border-radius: 20px !important;
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important; height: 210px; display: flex;
@@ -48,7 +47,6 @@ def load_all_tantan_data():
     except:
         all_sheets, months = {}, ["26.2"]
 
-    # [탭 1] 고정 데이터 (매니저님이 만족하신 원래 수치)
     d = {
         "current_assets": 403641070, "current_debt": 290900679, "net_asset": 112740391,
         "last_month_net": 108187566, "base_net_asset": 75767585,
@@ -74,39 +72,28 @@ def load_all_tantan_data():
 
 d, df_p, df_t, available_months, raw_sheets = load_all_tantan_data()
 
-# [함수 추가] 재무상태 표 스타일링 (D, E열 텍스트 유지 및 행 색상 완벽 재현)
+# [스타일링 함수] F~I열 정수 및 콤마 적용 (TypeError 해결)
 def style_financial_sheet(df):
-    # D, E열 (인덱스 2, 3) 텍스트 강제 변환
-    df.iloc[:, 2] = df.iloc[:, 2].astype(str).replace("nan", "")
-    df.iloc[:, 3] = df.iloc[:, 3].astype(str).replace("nan", "")
-    
     df = df.replace(".", "").fillna("")
-    
-    # F~I열 숫자 처리
-    num_cols = df.columns[4:9] 
+    num_cols = df.columns[3:10] # D~J열
     for col in num_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # [핵심 수정] 숫자 변환 전 문자열로 통일 후 변환, 오류 시 0 처리
+        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     def apply_row_style(row):
-        cat = str(row.iloc[0])     # A열: 구분
-        sub_cat = str(row.iloc[1]) # B열: 세부 항목
-        
-        # 1. 메인 헤더 (자산, 부채, 순자산) -> 검정 배경/흰 글씨
+        cat, sub_cat = str(row.iloc[0]), str(row.iloc[1])
         if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
-        # 2. 카테고리 (유동 자산, 투자 자산 등) -> 연회색 배경
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
             return ['background-color: #E9ECEF; color: black; font-weight: 700'] * len(row)
-        # 3. 자산 데이터 행 -> 요청하신 연한 회색 배경
         elif cat == '자산' and sub_cat != "":
             return ['background-color: #F8F9FA; color: black'] * len(row)
-        
         return ['background-color: white; color: black'] * len(row)
 
     return df.style.apply(apply_row_style, axis=1).format({
-        df.columns[4]: "{:,.0f}", df.columns[5]: "{:,.0f}",
-        df.columns[6]: "{:,.0f}", df.columns[7]: "{:,.0f}",
-        df.columns[8]: "{:,.0f}", df.columns[9]: "{:,.1f}"
+        df.columns[3]: "{:,.0f}", df.columns[4]: "{:,.0f}", df.columns[5]: "{:,.0f}",
+        df.columns[6]: "{:,.0f}", df.columns[7]: "{:,.0f}", df.columns[8]: "{:,.0f}",
+        df.columns[9]: "{:,.1f}"
     })
 
 # --- [Header] 복구 완료! ---
@@ -115,7 +102,7 @@ st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 (갈색 테마 완벽 복구) ---
+# --- [탭 1] 전체 현황 (파이차트 완벽 복구) ---
 with t1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -139,17 +126,18 @@ with t1:
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         st.table(pd.DataFrame([{"보관하는 사람": "👸 왕비", "금액(원)": "65,850,668", "비중": "64.5%"}, {"보관하는 사람": "🤴 왕", "금액(원)": "36,290,402", "비중": "35.5%"}, {"보관하는 사람": "합계", "금액(원)": "102,141,070", "비중": "100.0%"}]).set_index("보관하는 사람"))
+        
+        # [핵심 수정] 도넛 구멍 없는 꽉 찬 파이차트로 복구
         fig_p = px.pie(df_p, names='보관하는 사람', values='금액', color='보관하는 사람', color_discrete_sequence=['#FF1493', '#8E44AD'])
-        fig_p.update_traces(textinfo="label+percent", textposition="inside", insidetextorientation='horizontal')
+        fig_p.update_traces(textinfo="label+percent", textposition="inside", insidetextorientation='horizontal', hole=0) # hole=0 설정으로 도넛 제거
         fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
-# --- [탭 2] 월별 보기 (데이터 정밀도 및 스타일링) ---
+# --- [탭 2] 월별 보기 (TypeError 해결) ---
 with t2:
     st.markdown("<div class='section-title'>📅 월별 상세 재무 분석</div>", unsafe_allow_html=True)
     sel = st.selectbox("분석할 월 선택", options=available_months, index=0)
     
-    # 26.2 실제 데이터 매핑 (image_ca689d 참고)
     cur = {"income": 11547372, "f_inc": 6080000, "v_inc": 5467372, "expense": 6125348, "f_exp": 2253453, "v_exp": 3871895, "total": 7063715, "f_cont": 2632715, "free_cont": 4431000}
 
     c1, c2, c3 = st.columns(3)
@@ -170,11 +158,10 @@ with t2:
     st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
     if s_sheet in raw_sheets:
-        # [해결] 천 단위 콤마, 정수 표기, 색상 테마 완벽 적용
         styled_df = style_financial_sheet(raw_sheets[s_sheet].iloc[:, 0:10])
         st.dataframe(styled_df, use_container_width=True, height=600)
 
-# --- [탭 3] 궁금증해결 ---
+# --- [탭 3] 궁금증해결 (시뮬레이션) ---
 with t3:
     st.markdown("<div class='section-title'>💡 탄탄부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     
