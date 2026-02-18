@@ -20,50 +20,36 @@ st.markdown("""
         flex-direction: column; justify-content: center; overflow: hidden;
     }
     .metric-label { font-size: 16px; font-weight: 700; color: #666; margin-bottom: 8px; }
-    .metric-value { font-size: 26px; font-weight: 700; color: #000000 !important; }
+    .metric-value { font-size: 24px; font-weight: 700; color: #000000 !important; }
     .sub-text { font-size: 12px; color: #666; font-weight: 500; margin-top: 5px; }
     .highlight-text { color: #FF1493; font-weight: 800; }
-
-    .growth-pill { padding: 4px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; display: inline-block; margin-top: 10px; background-color: #FFE4E1; color: #FF1493; }
-
-    /* 슬라이더 스타일 */
-    div[data-testid="stSlider"], div[data-testid="stSlider"] > div { background-color: transparent !important; background: none !important; border: none !important; }
-    .stSlider [data-baseweb="slider"] > div:first-child { background: #dee2e6 !important; }
-    .stSlider [data-baseweb="slider"] > div > div { background: #495057 !important; }
-    .stSlider [role="slider"] { background-color: #495057 !important; border: 2px solid #FFFFFF !important; }
-
-    /* 표 스타일: 헤더만 연회색 */
-    .stTable thead tr th { background-color: #F8F9FA !important; color: #000000 !important; font-weight: 700 !important; text-align: center !important; }
-    .stTable tbody tr td { color: #000000 !important; font-weight: 500 !important; text-align: center !important; background-color: #FFFFFF !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연동 및 스타일링 로직
+# 2. 데이터 연동 및 매핑 로직
 SHEET_ID = "1gcAqoVL6Y4XCh-EWrm3-Nprya3xEauLS4VckrFiBYqw"
 EXCEL_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 @st.cache_data(ttl=60)
 def load_all_tantan_data():
-    try:
-        all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
-        s_names = list(all_sheets.keys())
-        # 26.1. 처럼 한 자리 월도 인식하는 Regex
-        months = sorted(list(set([re.findall(r'(26\.\d{1,2})\.', s)[0] for s in s_names if re.findall(r'(26\.\d{1,2})\.', s)])), key=lambda x: float(x), reverse=True)
-    except:
-        all_sheets, months = {}, ["26.2"]
+    all_sheets = pd.read_excel(EXCEL_URL, sheet_name=None, engine='openpyxl')
+    s_names = list(all_sheets.keys())
+    # yy.m. 또는 yy.mm. 패턴 자동 인식
+    months = sorted(list(set([re.findall(r'(\d{2}\.\d{1,2})\.', s)[0] for s in s_names if re.findall(r'(\d{2}\.\d{1,2})\.', s)])), key=lambda x: float(x), reverse=True)
+    months = [m for m in months if m.startswith('26')]
 
     # [탭 1] 고정 데이터
     d = {
         "current_assets": 403641070, "current_debt": 290900679, "net_asset": 112740391,
         "last_month_net": 108187566, "base_net_asset": 75767585,
-        "avg_monthly_inc": 6391299 # 최근 평균 순자산 증액분
+        "avg_monthly_inc": 6391299 
     }
     
     df_p_main = pd.DataFrame([
         {"보관하는 사람": "👸 왕비", "항목": "해외주식", "금액": 31225286, "색상": "#FF1493", "유동성": True},
-        {"보관하는 사람": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4", "유동성": False},
         {"보관하는 사람": "👸 왕비", "항목": "ISA", "금액": 8651400, "색상": "#FFB6C1", "유동성": True},
         {"보관하는 사람": "👸 왕비", "항목": "가상화폐", "금액": 6096394, "색상": "#FFC0CB", "유동성": True},
+        {"보관하는 사람": "👸 왕비", "항목": "연금저축", "금액": 16803088, "색상": "#FF69B4", "유동성": False},
         {"보관하는 사람": "👸 왕비", "항목": "보험", "금액": 3074500, "색상": "#FFE4E1", "유동성": False},
         {"보관하는 사람": "🤴 왕", "항목": "해외주식 ", "금액": 34809457, "색상": "#8E44AD", "유동성": True},
         {"보관하는 사람": "🤴 왕", "항목": "ISA ", "금액": 1480945, "색상": "#D7BDE2", "유동성": True}
@@ -77,13 +63,12 @@ def load_all_tantan_data():
     ])
     df_t['날짜'] = pd.to_datetime(df_t['날짜'])
     df_t['순자산_만원'] = (df_t['순자산'] / 10000).astype(int)
-    df_t['증감'] = df_t['순자산_만원'].diff().fillna(0).astype(int)
     
     return d, df_p_main, df_t, months, all_sheets
 
 d, df_p, df_t, available_months, raw_sheets = load_all_tantan_data()
 
-# 탭 2용 스타일링 함수 (정수 포맷팅 및 콤마 추가)
+# 스타일링 함수 (F~I열 정수 및 콤마 적용)
 def style_financial_sheet(df):
     df = df.replace(".", "").fillna("")
     num_cols = df.columns[3:10]
@@ -91,8 +76,7 @@ def style_financial_sheet(df):
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     def apply_row_style(row):
-        cat = str(row.iloc[0])
-        sub_cat = str(row.iloc[1])
+        cat, sub_cat = str(row.iloc[0]), str(row.iloc[1])
         if cat in ['자산', '부채', '순자산'] and sub_cat == "":
             return ['background-color: #333333; color: white; font-weight: 800'] * len(row)
         elif sub_cat in ['유동 자산', '투자 자산', '비유동 자산', '단기 부채', '장기 부채']:
@@ -107,50 +91,34 @@ def style_financial_sheet(df):
         df.columns[9]: "{:,.1f}"
     })
 
-# --- [Header] 대시보드 정체성 ---
+# --- [Header] ---
 st.title("🏆 탄탄부부의 경제적 자유를 위한 위대한 여정")
 st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
-tab1, tab2, tab3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
+t1, t2, t3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
-# --- [탭 1] 전체 현황 ---
-with tab1:
-    st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 자산</div><div class='metric-value'>{d['current_assets']:,.0f}원</div></div>", unsafe_allow_html=True)
-    with c2: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 부채</div><div class='metric-value'>{d['current_debt']:,.0f}원</div></div>", unsafe_allow_html=True)
-    with c3:
-        diff = d['net_asset'] - d['last_month_net']
-        st.markdown(f"<div class='custom-card'><div class='metric-label'>순자산</div><div class='metric-value'>{d['net_asset']:,.0f}원</div><div><span class='growth-pill'>전월 대비 {abs(diff):,.0f}원 ↑</span></div></div>", unsafe_allow_html=True)
-    st.divider()
-    col_l, col_r = st.columns([1.2, 1])
-    with col_l:
-        st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
-        m_list = df_t['날짜'].dt.strftime('%Y-%m').tolist()
-        sm, em = st.select_slider("📅 조회 월 범위 선택", options=m_list, value=(m_list[0], m_list[-1]), key="s_main")
-        ft = df_t[(df_t['날짜'] >= pd.to_datetime(sm)) & (df_t['날짜'] <= pd.to_datetime(em))]
-        fig_l = go.Figure()
-        fig_l.add_trace(go.Scatter(x=ft['날짜'], y=ft['순자산_만원'], mode='lines+markers+text', text=[f"{v:,}만\n(+{z:,})" if z!=0 else f"{v:,}만" for v, z in zip(ft['순자산_만원'], ft['증감'])], textposition="top center", line=dict(color='#5D4037', width=4), marker=dict(size=12, color='#5D4037')))
-        fig_l.update_layout(yaxis=dict(range=[7000, ft['순자산_만원'].max()*1.15]), xaxis=dict(tickformat="%y.%m"), plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, l=0, r=0, b=0))
-        st.plotly_chart(fig_l, use_container_width=True)
-    with col_r:
-        st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
-        os = df_p.groupby("보관하는 사람")["금액"].sum().reset_index()
-        ti = os["금액"].sum()
-        os = pd.concat([os, pd.DataFrame([{"보관하는 사람": "합계", "금액": ti}])], ignore_index=True)
-        os["비중"] = (os["금액"] / ti * 100).round(1).astype(str) + "%"
-        os["금액(원)"] = os["금액"].apply(lambda x: f"{x:,.0f}")
-        st.table(os[["보관하는 사람", "금액(원)", "비중"]].set_index("보관하는 사람"))
-        fig_p = px.pie(df_p, names='항목', values='금액', color='항목', color_discrete_map={r['항목']: r['색상'] for _, r in df_p.iterrows()})
-        fig_p.update_traces(textinfo="label+percent+value", texttemplate="%{label}<br>%{percent}<br>₩%{value:,.0f}", textposition="inside", insidetextorientation='horizontal')
-        fig_p.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
-        st.plotly_chart(fig_p, use_container_width=True)
-
-# --- [탭 2] 월별 보기 ---
-with tab2:
+# --- [탭 2] 월별 보기 (데이터 연동 강화) ---
+with t2:
     st.markdown("<div class='section-title'>📅 월별 상세 재무 분석</div>", unsafe_allow_html=True)
     sel = st.selectbox("분석할 월 선택", options=available_months, index=0)
-    cur = {"income": 11547372, "f_inc": 6080000, "v_inc": 5467372, "expense": 6125348, "f_exp": 2253453, "v_exp": 3871895, "total": 7063715, "f_cont": 2632715, "free_cont": 4431000}
+    
+    # [데이터 자동 매핑] '현금흐름' 시트에서 수치 추출 시도
+    f_sheet = f"{sel}. 현금흐름"
+    if f_sheet in raw_sheets:
+        fs = raw_sheets[f_sheet]
+        # 시트 내 위치가 고정되어 있다면 아래와 같이 추출 (예시 인덱스)
+        # 실제 시트 구조에 맞춰 행/열 번호(iloc)를 조정해야 합니다.
+        try:
+            cur = {
+                "income": fs.iloc[1, 2], "f_inc": fs.iloc[2, 2], "v_inc": fs.iloc[3, 2],
+                "expense": fs.iloc[5, 2], "f_exp": fs.iloc[6, 2], "v_exp": fs.iloc[7, 2],
+                "total": fs.iloc[9, 2], "f_cont": fs.iloc[10, 2], "free_cont": fs.iloc[11, 2]
+            }
+        except:
+            # 시트 구조가 다를 경우를 대비한 백업 (26.2. 기준 하드코딩)
+            cur = {"income": 11547372, "f_inc": 6080000, "v_inc": 5467372, "expense": 6125348, "f_exp": 2253453, "v_exp": 3871895, "total": 7063715, "f_cont": 2632715, "free_cont": 4431000}
+    else:
+        cur = {"income": 0, "f_inc": 0, "v_inc": 0, "expense": 0, "f_exp": 0, "v_exp": 0, "total": 0, "f_cont": 0, "free_cont": 0}
 
     c1, c2, c3 = st.columns(3)
     with c1: st.markdown(f"<div class='custom-card'><div class='metric-label'>이번 달 총 수입</div><div class='metric-value'>{cur['income']:,.0f}원</div><div class='sub-text'>고정 {cur['f_inc']:,.0f} / 변동 {cur['v_inc']:,.0f}</div></div>", unsafe_allow_html=True)
@@ -158,47 +126,33 @@ with tab2:
     with c3: st.markdown(f"<div class='custom-card'><div class='metric-label'>총 투입 (투자+상환)</div><div class='metric-value'>{cur['total']:,.0f}원</div><div class='sub-text'>고정 {cur['f_cont']:,.0f} / 자유 {cur['free_cont']:,.0f}</div></div>", unsafe_allow_html=True)
 
     st.divider()
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        st.write("**💰 투자 종목 증가 Top 5 (금액 기준)**")
-        amt_df = pd.DataFrame({"종목": ["GOOGL", "SCHD", "TIGER 미국배당", "ETH", "XRP"], "증가액": ["1,561,671", "874,183", "539,175", "505,594", "400,701"]})
-        st.table(amt_df.set_index("종목"))
-    with col_t2:
-        st.write("**📦 투자 종목 증가 Top 5 (수량 기준)**")
-        qty_df = pd.DataFrame({"종목": ["XRP", "SCHD", "GOOGL", "TIGER 미국배당", "Tesla"], "증가수량": ["187", "81", "5", "5", "1"]})
-        st.table(qty_df.set_index("종목"))
-
-    st.divider()
-    st.markdown(f"<div class='section-title'>🧱 {sel}. 재무상태 상세 (A~J열)</div>", unsafe_allow_html=True)
     s_sheet = f"{sel}. 재무상태"
     if s_sheet in raw_sheets:
         styled_df = style_financial_sheet(raw_sheets[s_sheet].iloc[:, 0:10])
         st.dataframe(styled_df, use_container_width=True, height=600)
-    else:
-        st.info(f"'{s_sheet}' 시트 데이터를 불러올 수 없습니다.")
 
 # --- [탭 3] 궁금증해결 ---
-with tab3:
+with t3:
     st.markdown("<div class='section-title'>💡 탄탄부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
     
-    # 1. 왕(동현)의 궁금증
+    # 왕의 궁금증
     st.markdown("### 🤴 왕(동현)의 궁금증 : '우리 당장 쓸 수 있는 돈이 얼마야?'")
     liquid_df = df_p[df_p['유동성'] == True]
     total_liquid = liquid_df['금액'].sum()
     
     c_l1, c_l2 = st.columns([1, 1.5])
     with c_l1:
-        st.markdown(f"<div class='custom-card' style='text-align:center;'><div class='metric-label'>부부 합산 즉시 가용 자산</div><div class='metric-value' style='color:#2E7D32;'>₩ {total_liquid:,.0f}</div><div class='sub-text'>(26.02. 재무상태 기준)</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-card' style='text-align:center;'><div class='metric-label'>부부 합산 즉시 가용 자산</div><div class='metric-value' style='color:#2E7D32;'>₩ {total_liquid:,.0f}</div><div class='sub-text'>({sel}. 재무상태 기준)</div></div>", unsafe_allow_html=True)
     with c_l2:
         st.write("**💰 가용 자산 상세 구성**")
-        comp = liquid_df.groupby('항목')['금액'].sum().reset_index()
+        comp = liquid_assets = liquid_df.groupby('항목')['금액'].sum().reset_index()
         comp['비중'] = (comp['금액']/total_liquid*100).round(1).astype(str) + "%"
         comp['금액(원)']=comp['금액'].apply(lambda x:f"{x:,.0f}")
         st.table(comp[['항목', '금액(원)', '비중']].set_index('항목'))
 
     st.divider()
 
-    # 2. 왕비(건희)의 궁금증 (1차, 2차 목표)
+    # 왕비의 궁금증
     st.markdown("### 👸 왕비(건희)의 궁금증 : '우리 목표까지 얼마나 남았지?'")
     targets = {"1차 목표": {"amount": 175500000, "desc": "+1억 증식 (1.75억)", "plan": "2027-06"}, "2차 목표": {"amount": 200000000, "desc": "순자산 2억 돌파", "plan": "2027-12"}}
     
