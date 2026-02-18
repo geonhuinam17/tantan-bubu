@@ -13,10 +13,10 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'KoPubWorldDotum', sans-serif !important;
-        background-color: #E9ECEF; /* [수정 1] 더 진한 회색 배경 */
+        background-color: #E9ECEF; /* 진한 회색 배경 */
     }
     
-    /* 섹션 제목 및 카드 내부 텍스트 스타일 */
+    /* 섹션 제목 스타일 */
     .section-title {
         font-size: 20px !important;
         font-weight: 700 !important;
@@ -33,12 +33,20 @@ st.markdown("""
         height: 160px;
     }
 
-    /* 메트릭 라벨을 네모 안 상단에 예쁘게 배치 */
+    /* 메트릭 라벨 스타일 */
     [data-testid="stMetricLabel"] {
         font-size: 16px !important;
         font-weight: 700 !important;
         color: #666 !important;
         margin-bottom: 10px !important;
+    }
+
+    /* [수정] 기간 선택 슬라이더 바 색상을 진한 회색으로 변경 */
+    .stSlider [data-baseweb="slider"] > div:first-child {
+        background: #6C757D !important;
+    }
+    .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] {
+        display: none;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -49,6 +57,7 @@ def get_final_data():
     summary = {
         "current_assets": 403641070, "current_debt": 290900679, "net_asset": 112740391,
         "last_month_net": 108187566, "base_net_asset": 75767585,
+        "monthly_income": 11547372, "monthly_expense": 6125348, "monthly_savings": 5422024
     }
     
     # 👸 왕비(분홍) / 🤴 왕(하늘) 포트폴리오
@@ -77,11 +86,11 @@ def get_final_data():
 d, df_p, df_t = get_final_data()
 
 st.title("🏆 탄탄부부의 경제적 자유를 위한 위대한 여정")
-# [수정 2] 이모지 변경: 로켓(🚀)과 노란색 하트(💛)
 st.markdown("#### 우리의 속도대로 차근차근 성실하게 🚀💛")
 
 tab1, tab2, tab3 = st.tabs(["📊 전체 현황", "📆 월별 보기", "💡 궁금증해결"])
 
+# --- [탭 1] 전체 현황 ---
 with tab1:
     st.markdown("<div class='section-title'>📍 현재 위치 요약</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -115,6 +124,64 @@ with tab1:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         fig_pie = px.sunburst(df_p, path=['소유주', '항목'], values='금액',
                               color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
+        # [수정] 중앙 노란색 배경 제거 및 투명 설정
         fig_pie.update_traces(textinfo="label+value+percent parent", insidetextorientation='horizontal')
-        fig_pie.update_layout(margin=dict(t=0, l=0, r=0, b=0), sunburstcolorway=["#FFB6C1", "#ADD8E6"])
+        fig_pie.update_layout(
+            margin=dict(t=0, l=0, r=0, b=0), 
+            paper_bgcolor='rgba(0,0,0,0)',
+            sunburstcolorway=["rgba(0,0,0,0)"] # 중앙 노드 색상 투명화
+        )
         st.plotly_chart(fig_pie, use_container_width=True)
+
+# --- [탭 2] 월별 보기 ---
+with tab2:
+    st.markdown("<div class='section-title'>📆 이번 달 현금흐름 분석 (26.02 기준)</div>", unsafe_allow_html=True)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("총 수입", f"{d['monthly_income']:,.0f}원")
+    m2.metric("총 지출", f"{d['monthly_expense']:,.0f}원")
+    savings_rate = (d['monthly_savings'] / d['monthly_income']) * 100
+    m3.metric("저축률", f"{savings_rate:.1f}%", delta=f"{d['monthly_savings']:,.0f}원 저축")
+
+    st.divider()
+    
+    st.markdown("<div class='section-title'>현금흐름 구조</div>", unsafe_allow_html=True)
+    cf_data = pd.DataFrame({
+        "구분": ["수입", "지출", "저축"],
+        "금액": [d['monthly_income'], d['monthly_expense'], d['monthly_savings']]
+    })
+    fig_bar = px.bar(cf_data, x="구분", y="금액", color="구분", 
+                     color_discrete_map={"수입": "#6C757D", "지출": "#FF69B4", "저축": "#5D4037"})
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+# --- [탭 3] 궁금증해결 ---
+with tab3:
+    st.markdown("<div class='section-title'>💡 부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
+    
+    col_husband, col_wife = st.columns(2)
+    
+    with col_husband:
+        # 남편이 가장 궁금해하는 것: 현금화 가능 자산
+        st.markdown("### 🤴 왕(동현) : 당장 쓸 수 있는 돈")
+        # 해외주식 + 가상화폐 + ISA 합계 (왕 데이터 기준)
+        liquid_val = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|가상화폐|ISA'))]['금액'].sum()
+        st.markdown(f"""
+            <div style="background-color: #FFFFFF; padding: 30px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center;">
+                <h1 style="color: #00BFFF; margin: 0;">₩ {liquid_val:,.0f}</h1>
+                <p style="color: #666; margin-top: 10px;">지금 당장 현금화하여 사용할 수 있는 유동 자산입니다.</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_wife:
+        # 아내가 가장 궁금해하는 것: 목표 달성률
+        st.markdown("### 👸 왕비(건희) : 목표 달성 현황")
+        net_increase = d['net_asset'] - d['base_net_asset']
+        goal1 = 100000000 # 1억
+        progress1 = min(net_increase / goal1, 1.0)
+        
+        st.write(f"**🎯 1차 목표 (+1억) 달성률: {progress1*100:.1f}%**")
+        st.progress(progress1)
+        st.write(f"현재까지 순수하게 모은 돈: **{net_increase:,.0f}원**")
+        
+        if progress1 >= 1.0:
+            st.balloons()
+            st.success("🎉 축하합니다! 1차 목표인 1억 원을 달성했습니다!")
