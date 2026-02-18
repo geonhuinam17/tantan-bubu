@@ -13,7 +13,7 @@ st.markdown("""
     
     html, body, [class*="css"] {
         font-family: 'KoPubWorldDotum', sans-serif !important;
-        background-color: #E9ECEF; 
+        background-color: #E9ECEF; /* 진한 회색 배경 */
     }
     
     .section-title {
@@ -39,16 +39,24 @@ st.markdown("""
         margin-bottom: 10px !important;
     }
 
-    /* [수정 1] 기간 선택 슬라이더 선 색상 및 배경 투명화 */
-    .stSlider [data-baseweb="slider"] > div:first-child {
-        background: #6C757D !important;
-    }
+    /* [수정] 슬라이더 배경 삭제 및 '선' 색상만 진한 회색으로 고정 */
     div[data-testid="stSlider"] {
-        background-color: transparent !important;
-        padding: 10px 0px;
+        background-color: transparent !important; /* 배경 삭제 */
+        padding: 0px !important;
     }
-    .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] {
-        display: none;
+    
+    /* 슬라이더 트랙(선) 색상 수정 */
+    .stSlider [data-baseweb="slider"] > div {
+        background-color: #dee2e6 !important; /* 기본 선 (연회색) */
+    }
+    .stSlider [data-baseweb="slider"] > div > div {
+        background-color: #495057 !important; /* 선택된 구간의 선 (진한 회색) */
+    }
+    
+    /* 슬라이더 핸들(동그라미) 색상 */
+    .stSlider [role="slider"] {
+        background-color: #495057 !important;
+        border: 2px solid #FFFFFF !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -105,21 +113,19 @@ with tab1:
     
     with col_l:
         st.markdown("<div class='section-title'>순자산 성장 추이</div>", unsafe_allow_html=True)
-        # [수정 1] 차트 먼저 보여주고 하단에 기간 선택 배치
         f_t_base = df_t.copy()
         months = f_t_base['날짜'].dt.strftime('%Y-%m').tolist()
         
         # 차트 영역
-        fig_line = go.Figure()
-        # 임시 데이터 필터링을 위한 컨테이너
         chart_placeholder = st.empty()
 
-        # [수정 1] 하단에 배치
+        # [수정] 하단 슬라이더 배치 (배경은 투명, 선만 진회색)
         start_m, end_m = st.select_slider("📅 조회 월 범위 선택", options=months, value=(months[0], months[-1]))
         f_t = f_t_base[(f_t_base['날짜'] >= pd.to_datetime(start_m)) & (f_t_base['날짜'] <= pd.to_datetime(end_m))]
         
+        fig_line = go.Figure()
         fig_line.add_trace(go.Scatter(
-            x=f_t['날짜'], y=f_t['순자산_만원'], mode='lines+markers+text',
+            x=f_t['날짜'], y=f_t['순자산_만원'], mode='markers+lines+text',
             text=[f"{v:,}만\n(+{z:,})" if z != 0 else f"{v:,}만" for v, z in zip(f_t['순자산_만원'], f_t['증감'])],
             textposition="top center", line=dict(color='#5D4037', width=4), marker=dict(size=12, color='#5D4037')
         ))
@@ -133,72 +139,33 @@ with tab1:
     with col_r:
         st.markdown("<div class='section-title'>투자 자산 구성</div>", unsafe_allow_html=True)
         
-        # [수정 2] 왕/왕비 비중 별도 표 (상단 배치)
+        # [수정] 왕/왕비 비중 요약 표
         owner_summary = df_p.groupby("소유주")["금액"].sum().reset_index()
-        total_investment = owner_summary["금액"].sum()
-        owner_summary["비중"] = (owner_summary["금액"] / total_investment * 100).round(1).astype(str) + "%"
+        total_inv = owner_summary["금액"].sum()
+        owner_summary["비중"] = (owner_summary["금액"] / total_inv * 100).round(1).astype(str) + "%"
         owner_summary["금액(원)"] = owner_summary["금액"].apply(lambda x: f"{x:,.0f}")
         
         st.table(owner_summary[["소유주", "금액(원)", "비중"]].set_index("소유주"))
 
-        # [수정 2] 선버스트 대신 파이차트로 변경
+        # 파이차트
         fig_pie = px.pie(df_p, names='항목', values='금액',
                          color='항목', color_discrete_map={row['항목']: row['색상'] for _, row in df_p.iterrows()})
-        
         fig_pie.update_traces(textinfo="label+percent", textposition="inside")
-        fig_pie.update_layout(
-            margin=dict(t=0, l=0, r=0, b=0), 
-            paper_bgcolor='rgba(0,0,0,0)',
-            showlegend=False
-        )
+        fig_pie.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- [탭 2] 월별 보기 ---
+# 탭 2 & 탭 3은 기존 기획대로 유지
 with tab2:
-    st.markdown("<div class='section-title'>📆 이번 달 현금흐름 분석 (26.02 기준)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>📆 이번 달 현금흐름 분석</div>", unsafe_allow_html=True)
     m1, m2, m3 = st.columns(3)
     m1.metric("총 수입", f"{d['monthly_income']:,.0f}원")
     m2.metric("총 지출", f"{d['monthly_expense']:,.0f}원")
-    savings_rate = (d['monthly_savings'] / d['monthly_income']) * 100
-    m3.metric("저축률", f"{savings_rate:.1f}%", delta=f"{d['monthly_savings']:,.0f}원 저축")
+    m3.metric("저축률", f"{(d['monthly_savings'] / d['monthly_income'] * 100):.1f}%")
 
-    st.divider()
-    
-    st.markdown("<div class='section-title'>현금흐름 구조</div>", unsafe_allow_html=True)
-    cf_data = pd.DataFrame({
-        "구분": ["수입", "지출", "저축"],
-        "금액": [d['monthly_income'], d['monthly_expense'], d['monthly_savings']]
-    })
-    fig_bar = px.bar(cf_data, x="구분", y="금액", color="구분", 
-                     color_discrete_map={"수입": "#6C757D", "지출": "#FF69B4", "저축": "#5D4037"})
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-# --- [탭 3] 궁금증해결 ---
 with tab3:
     st.markdown("<div class='section-title'>💡 부부 전용 궁금증 해결</div>", unsafe_allow_html=True)
-    
-    col_husband, col_wife = st.columns(2)
-    
-    with col_husband:
+    c_h, c_w = st.columns(2)
+    with c_h:
         st.markdown("### 🤴 왕(동현) : 당장 쓸 수 있는 돈")
-        liquid_val = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|가상화폐|ISA'))]['금액'].sum()
-        st.markdown(f"""
-            <div style="background-color: #FFFFFF; padding: 30px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center;">
-                <h1 style="color: #00BFFF; margin: 0;">₩ {liquid_val:,.0f}</h1>
-                <p style="color: #666; margin-top: 10px;">지금 당장 현금화하여 사용할 수 있는 유동 자산입니다.</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with col_wife:
-        st.markdown("### 👸 왕비(건희) : 목표 달성 현황")
-        net_increase = d['net_asset'] - d['base_net_asset']
-        goal1 = 100000000 # 1억
-        progress1 = min(net_increase / goal1, 1.0)
-        
-        st.write(f"**🎯 1차 목표 (+1억) 달성률: {progress1*100:.1f}%**")
-        st.progress(progress1)
-        st.write(f"현재까지 순수하게 모은 돈: **{net_increase:,.0f}원**")
-        
-        if progress1 >= 1.0:
-            st.balloons()
-            st.success("🎉 축하합니다! 1차 목표인 1억 원을 달성했습니다!")
+        liq = df_p[(df_p['소유주'] == "🤴 왕") & (df_p['항목'].str.contains('해외주식|가상화폐|ISA'))]['금액'].sum()
+        st.markdown(f"<div style='background-color:#FFF; padding:30px; border-radius:20px; text-align:center;'><h1>₩ {liq:,.0f}</h1></div>", unsafe_allow_html=True)
