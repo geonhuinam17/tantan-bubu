@@ -146,4 +146,7 @@ with tab1:
         
         fig_pie.update_layout(
             # 글자 크기 최소값 설정 및 넘치는 글자 자동 처리
-            uniformtext
+            uniformtext=dict(minsize=11, mode='show'), 
+            margin=dict(t=0, l=0, r=0, b=0)
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
